@@ -1,5 +1,7 @@
 node_modules/
-terminales-administrativas/node_modules/
 .pnpm/
 .pnpm-store/
-
+dist/
+build/
+.env
+.DS_Store

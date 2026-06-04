@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: postgres_secure_pass
     volumes:
       - db_local_data:/var/lib/postgresql/data
-      - ./init-local.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./config/db/init-local.sql:/docker-entrypoint-initdb.d/init.sql:ro
     command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
     networks:
       - hospital_net
@@ -27,14 +27,14 @@ services:
       POSTGRES_PASSWORD: postgres_secure_pass
     volumes:
       - db_cloud_data:/var/lib/postgresql/data
-      - ./init-nube.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./config/db/init-nube.sql:/docker-entrypoint-initdb.d/init.sql:ro
     command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
     networks:
       - cloud_net
       - dmz_net
 
   app-estaciones:
-    build: ./estaciones-medicas
+    build: ./apps/estaciones-medicas
     container_name: app-estaciones
     restart: always
     ports:
@@ -51,7 +51,7 @@ services:
       - db-local
 
   app-terminales:
-    build: ./terminales-administrativas
+    build: ./apps/terminales-administrativas
     container_name: app-terminales
     restart: always
     ports:

@@ -1,7 +1,8 @@
 const { io } = require("socket.io-client");
 const { exec } = require("child_process");
+const path = require("path");
 
-const COMPOSE_FILE = "C:/Users/Administrator/Desktop/Proyecto-OSDS/docker-compose.yml";
+const COMPOSE_FILE = path.join(__dirname, "../docker-compose.yml");
 
 function runCmd(command) {
     return new Promise((resolve, reject) => {
