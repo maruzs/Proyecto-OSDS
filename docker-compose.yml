@@ -1,0 +1,130 @@
+version: '3.8'
+
+# =========================================================================
+# ORQUESTADOR GENERAL - PROYECTO UNIDAD 2 (INTEGRANTE 3 - DEVOPS)
+# SISTEMAS OPERATIVOS Y DISTRIBUIDOS
+# =========================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # BASE DE DATOS LOCAL (HOSPITAL LOCAL)
+  # -------------------------------------------------------------------------
+  db-local:
+    image: postgres:15-alpine
+    container_name: db-local
+    restart: always
+    environment:
+      POSTGRES_DB: clinica
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass
+    volumes:
+      - db_local_data:/var/lib/postgresql/data
+      - ./init-local.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # Activar nivel lógico de WAL y configurar límites de replicación
+    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+    networks:
+      - hospital_net
+      - dmz_net # Permite la conexión directa desde db-nube para replicación
+
+  # -------------------------------------------------------------------------
+  # BASE DE DATOS REMOTA (ENTORNO NUBE)
+  # -------------------------------------------------------------------------
+  db-nube:
+    image: postgres:15-alpine
+    container_name: db-nube
+    restart: always
+    environment:
+      POSTGRES_DB: clinica
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass
+    volumes:
+      - db_cloud_data:/var/lib/postgresql/data
+      - ./init-nube.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # Activar nivel lógico de WAL y configurar límites de replicación
+    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+    networks:
+      - cloud_net
+      - dmz_net # Permite la conexión directa hacia db-local para replicación
+
+  # -------------------------------------------------------------------------
+  # APLICACIÓN: ESTACIONES MÉDICAS (HOSPITAL LOCAL)
+  # -------------------------------------------------------------------------
+  app-estaciones:
+    build: ./estaciones-medicas
+    container_name: app-estaciones
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      - DB_HOST=db-local
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - hospital_net
+    depends_on:
+      - db-local
+
+  # -------------------------------------------------------------------------
+  # APLICACIÓN: TERMINALES ADMINISTRATIVAS (ENTORNO NUBE)
+  # -------------------------------------------------------------------------
+  app-terminales:
+    build: ./terminales-administrativas
+    container_name: app-terminales
+    restart: always
+    ports:
+      - "8002:8002"
+    environment:
+      - DB_HOST=db-nube
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - cloud_net
+    depends_on:
+      - db-nube
+
+  # -------------------------------------------------------------------------
+  # PROXY PERIMETRAL Y SEGURIDAD (NGINX)
+  # -------------------------------------------------------------------------
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app-estaciones
+      - app-terminales
+    networks:
+      - hospital_net
+      - cloud_net
+      - dmz_net
+
+# =========================================================================
+# REDES VIRTUALES INTERNAS AISLADAS (DRIVER BRIDGE)
+# =========================================================================
+networks:
+  hospital_net:
+    driver: bridge
+    name: hospital_net
+  cloud_net:
+    driver: bridge
+    name: cloud_net
+  dmz_net:
+    driver: bridge
+    name: dmz_net
+
+# =========================================================================
+# VOLÚMENES PARA PERSISTENCIA DE DATOS
+# =========================================================================
+volumes:
+  db_local_data:
+    name: db_local_data
+  db_cloud_data:
+    name: db_cloud_data
