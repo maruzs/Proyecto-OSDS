@@ -67,22 +67,8 @@ services:
     depends_on:
       - db-nube
 
-  nginx-proxy:
-    image: nginx:alpine
-    container_name: nginx-proxy
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - app-estaciones
-      - app-terminales
-    networks:
-      - hospital_net
-      - cloud_net
-      - dmz_net
+  # TODO: Integrante 4 - Configurar el servicio de proxy inverso (nginx-proxy)
+
 
 networks:
   hospital_net:
