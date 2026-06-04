@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS fichas_pacientes (
 
 -- 3. CREACIÓN DE LA PUBLICACIÓN DESDE LA NUBE
 DROP PUBLICATION IF EXISTS pub_nube_a_local;
-CREATE PUBLICATION pub_nube_a_local FOR TABLE fichas_pacientes;
+CREATE PUBLICATION pub_nube_a_local FOR TABLE fichas_pacientes WHERE (origen_registro = 'nube');
+
 
 -- 4. CREACIÓN DE LA SUSCRIPCIÓN LÓGICA INICIAL HACIA EL HOSPITAL LOCAL
 -- Se conecta al contenedor 'db-local' en el puerto 5432 usando la red perimetral compartida 'dmz_net'.

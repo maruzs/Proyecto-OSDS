@@ -8,7 +8,7 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-    path: '/ws-medicas/',
+    path: '/ws-medicas',
     cors: { origin: "*" }
 });
 

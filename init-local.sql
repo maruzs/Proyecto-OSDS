@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS fichas_pacientes (
 
 -- 3. CREACIÓN DE LA PUBLICACIÓN LÓGICA LOCAL
 DROP PUBLICATION IF EXISTS pub_local_a_nube;
-CREATE PUBLICATION pub_local_a_nube FOR TABLE fichas_pacientes;
+CREATE PUBLICATION pub_local_a_nube FOR TABLE fichas_pacientes WHERE (origen_registro = 'local');
+
 
 
 

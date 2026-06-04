@@ -10,7 +10,7 @@ services:
   # BASE DE DATOS LOCAL (HOSPITAL LOCAL)
   # -------------------------------------------------------------------------
   db-local:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: db-local
     restart: always
     environment:
@@ -30,7 +30,7 @@ services:
   # BASE DE DATOS REMOTA (ENTORNO NUBE)
   # -------------------------------------------------------------------------
   db-nube:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: db-nube
     restart: always
     environment:
