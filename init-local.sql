@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS fichas_pacientes (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+
 -- 2. EXPLICACIÓN ESTRATEGIA DE PREVENCIÓN DE BUCLES (HITO 2):
 -- =========================================================================
 -- Cuando se active la replicación bidireccional asíncrona, el mayor peligro 
@@ -43,3 +44,37 @@ CREATE TABLE IF NOT EXISTS fichas_pacientes (
 -- 3. CREACIÓN DE LA PUBLICACIÓN LÓGICA LOCAL
 DROP PUBLICATION IF EXISTS pub_local_a_nube;
 CREATE PUBLICATION pub_local_a_nube FOR TABLE fichas_pacientes;
+
+
+
+
+-- 4. INSERCIÓN DE DATOS DE PRUEBA (INTEGRANTE 1)
+-- Registro 1: Control crónico
+INSERT INTO fichas_pacientes (id, rut, nombre, diagnostico, origen_registro)
+VALUES (
+    'f3b2c1a0-d4e5-4a6b-bc7d-8e9f0a1b2c3d', 
+    '12345678-9', 
+    'Juan Pérez', 
+    'DIAGNÓSTICO: Hipertensión arterial crónica controlada. RECETA: Enalapril 10mg cada 12 hrs por 90 días.',
+    'local'
+) ON CONFLICT (id) DO NOTHING;
+
+-- Registro 2: Paciente de Urgencias (Ideal para que QA pruebe el evento 'actualizar_diagnostico')
+INSERT INTO fichas_pacientes (id, rut, nombre, diagnostico, origen_registro)
+VALUES (
+    'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', 
+    '11111111-1', 
+    'María Loyola', 
+    'DIAGNÓSTICO: Traumatismo menor en tobillo derecho. RECETA: Ibuprofeno 600mg cada 8 hrs por 3 días y reposo muscular.',
+    'local'
+) ON CONFLICT (id) DO NOTHING;
+
+-- Registro 3: Alta médica
+INSERT INTO fichas_pacientes (id, rut, nombre, diagnostico, origen_registro)
+VALUES (
+    '9e8d7c6b-5a4f-3e2d-1c0b-9a8f7e6d5c4b', 
+    '22222222-2', 
+    'Carlos Silva', 
+    'DIAGNÓSTICO: Bronquitis aguda en fase de resolución. RECETA: Paracetamol 500mg cada 8 hrs en caso de dolor o fiebre.',
+    'local'
+) ON CONFLICT (id) DO NOTHING;
