@@ -2,7 +2,7 @@
 
 Este repositorio contiene el diseño e implementación de la **infraestructura transversal** y el **mecanismo de datos** para el Proyecto de la Unidad 2 de la asignatura **Sistemas Operativos y Distribuidos**. 
 
-El sistema simula un entorno de salud híbrido distribuido, estableciendo un límite de seguridad y aislamiento entre un **Hospital Local** (Entorno Físico) y el **Entorno Nube** (Remoto), comunicados de forma segura a través de WebSockets y sincronizados de forma asíncrona y bidireccional mediante replicación lógica en PostgreSQL 15.
+El sistema simula un entorno de salud híbrido distribuido, estableciendo un límite de seguridad y aislamiento entre un **Hospital Local** (Entorno Físico) y el **Entorno Nube** (Remoto), comunicados de forma segura a través de WebSockets y sincronizados de forma asíncrona y bidireccional mediante replicación lógica en PostgreSQL 16.
 
 ---
 
@@ -59,7 +59,7 @@ El repositorio está organizado de forma modular, cumpliendo estrictamente con e
 
 ### 1. Orquestación (`docker-compose.yml`)
 Define los cinco servicios que participan en la simulación:
-*   `db-local` y `db-nube` corriendo PostgreSQL 15-alpine con persistencia y configuración de nivel WAL lógico (`wal_level=logical`, `max_replication_slots=10`, `max_wal_senders=10`).
+*   `db-local` y `db-nube` corriendo PostgreSQL 16-alpine con persistencia y configuración de nivel WAL lógico (`wal_level=logical`, `max_replication_slots=10`, `max_wal_senders=10`).
 *   `app-estaciones` y `app-terminales` con builds parametrizados, variables de entorno inyectadas para la conexión segura a sus respectivas bases de datos, y aislamiento en sus redes correspondientes.
 *   `nginx-proxy` exponiendo los puertos 80 y 443.
 
@@ -83,14 +83,14 @@ CREATE TABLE fichas_pacientes (
 
 #### Estrategia para evitar bucles infinitos (Hito 2):
 Para evitar ciclos infinitos donde un dato replicado se re-publique de vuelta al nodo origen:
-1.  **Filtros de fila en publicaciones (Recomendado en PG 15+):**
+1.  **Filtros de fila en publicaciones:**
     *   La base local define su publicación para enviar únicamente datos de origen local:
         `CREATE PUBLICATION pub_local_a_nube FOR TABLE fichas_pacientes WHERE (origen_registro = 'local');`
     *   La base en la nube define su publicación para enviar únicamente datos de origen en la nube:
         `CREATE PUBLICATION pub_nube_a_local FOR TABLE fichas_pacientes WHERE (origen_registro = 'nube');`
     Como el campo `origen_registro` se replica pero no cambia, los datos replicados no serán capturados por la publicación de retorno.
 2.  **Cláusula de Origen en la Suscripción (`origin = none`):**
-    Establecer la opción `origin = none` al crear las suscripciones bidireccionales le indica a PostgreSQL que solo debe importar cambios que se originaron localmente en el publicador y no cambios importados de otros nodos.
+    Establecer la opción `origin = none` al crear las suscripciones bidireccionales le indica a PostgreSQL que solo debe importar cambios que se originaron localmente en el publicador y no cambios importados de otros nodos. Esta opción requiere **PostgreSQL 16+**, por lo que la infraestructura ha sido configurada con la imagen de PostgreSQL 16.
 
 ---
 
