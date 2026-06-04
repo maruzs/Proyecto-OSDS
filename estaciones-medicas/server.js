@@ -23,12 +23,9 @@ const pool = new Pool({
 const PORT = 8001;
 
 io.on('connection', (socket) => {
-    console.log('⚡ Estación Médica Conectada (ID):', socket.id);
+    console.log('Cliente conectado:', socket.id);
 
-    // Evento 1: Consultar ficha por RUT
     socket.on('consultar_paciente', async (data) => {
-        console.log('🔍 Consultando ficha del paciente RUT:', data.rut);
-
         try {
             const res = await pool.query(
                 'SELECT * FROM fichas_pacientes WHERE rut = $1',
@@ -40,17 +37,13 @@ io.on('connection', (socket) => {
             } else {
                 socket.emit('ficha_paciente', { estado: 'NO_ENCONTRADO', datos: null });
             }
-
         } catch (err) {
-            console.error('❌ Error consultando db-local:', err.message);
+            console.error('Error al consultar paciente:', err.message);
             socket.emit('ficha_paciente', { estado: 'ERROR', mensaje: err.message });
         }
     });
 
-    // Evento 2: Actualizar diagnóstico por UUID
     socket.on('actualizar_diagnostico', async (data) => {
-        console.log('💾 Actualizando diagnóstico del paciente ID:', data.id);
-
         try {
             const res = await pool.query(
                 `UPDATE fichas_pacientes 
@@ -65,18 +58,17 @@ io.on('connection', (socket) => {
             } else {
                 socket.emit('diagnostico_actualizado', { estado: 'NO_ENCONTRADO', datos: null });
             }
-
         } catch (err) {
-            console.error('❌ Error actualizando db-local:', err.message);
+            console.error('Error al actualizar diagnostico:', err.message);
             socket.emit('diagnostico_actualizado', { estado: 'ERROR', mensaje: err.message });
         }
     });
 
     socket.on('disconnect', () => {
-        console.log('❌ Estación Médica desconectada');
+        console.log('Cliente desconectado');
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`🏥 Servidor Estaciones Médicas operativo en puerto ${PORT}`);
+    console.log(`Servidor Estaciones Medicas operativo en puerto ${PORT}`);
 });

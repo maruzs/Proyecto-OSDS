@@ -1,14 +1,6 @@
 version: '3.8'
 
-# =========================================================================
-# ORQUESTADOR GENERAL - PROYECTO UNIDAD 2 (INTEGRANTE 3 - DEVOPS)
-# SISTEMAS OPERATIVOS Y DISTRIBUIDOS
-# =========================================================================
-
 services:
-  # -------------------------------------------------------------------------
-  # BASE DE DATOS LOCAL (HOSPITAL LOCAL)
-  # -------------------------------------------------------------------------
   db-local:
     image: postgres:16-alpine
     container_name: db-local
@@ -20,15 +12,11 @@ services:
     volumes:
       - db_local_data:/var/lib/postgresql/data
       - ./init-local.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    # Activar nivel lógico de WAL y configurar límites de replicación
     command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
     networks:
       - hospital_net
-      - dmz_net # Permite la conexión directa desde db-nube para replicación
+      - dmz_net
 
-  # -------------------------------------------------------------------------
-  # BASE DE DATOS REMOTA (ENTORNO NUBE)
-  # -------------------------------------------------------------------------
   db-nube:
     image: postgres:16-alpine
     container_name: db-nube
@@ -40,15 +28,11 @@ services:
     volumes:
       - db_cloud_data:/var/lib/postgresql/data
       - ./init-nube.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    # Activar nivel lógico de WAL y configurar límites de replicación
     command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
     networks:
       - cloud_net
-      - dmz_net # Permite la conexión directa hacia db-local para replicación
+      - dmz_net
 
-  # -------------------------------------------------------------------------
-  # APLICACIÓN: ESTACIONES MÉDICAS (HOSPITAL LOCAL)
-  # -------------------------------------------------------------------------
   app-estaciones:
     build: ./estaciones-medicas
     container_name: app-estaciones
@@ -66,9 +50,6 @@ services:
     depends_on:
       - db-local
 
-  # -------------------------------------------------------------------------
-  # APLICACIÓN: TERMINALES ADMINISTRATIVAS (ENTORNO NUBE)
-  # -------------------------------------------------------------------------
   app-terminales:
     build: ./terminales-administrativas
     container_name: app-terminales
@@ -86,9 +67,6 @@ services:
     depends_on:
       - db-nube
 
-  # -------------------------------------------------------------------------
-  # PROXY PERIMETRAL Y SEGURIDAD (NGINX)
-  # -------------------------------------------------------------------------
   nginx-proxy:
     image: nginx:alpine
     container_name: nginx-proxy
@@ -106,9 +84,6 @@ services:
       - cloud_net
       - dmz_net
 
-# =========================================================================
-# REDES VIRTUALES INTERNAS AISLADAS (DRIVER BRIDGE)
-# =========================================================================
 networks:
   hospital_net:
     driver: bridge
@@ -120,9 +95,6 @@ networks:
     driver: bridge
     name: dmz_net
 
-# =========================================================================
-# VOLÚMENES PARA PERSISTENCIA DE DATOS
-# =========================================================================
 volumes:
   db_local_data:
     name: db_local_data
