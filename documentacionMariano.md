@@ -77,3 +77,31 @@ sudo docker-compose up --build -d
 ```
 
 Esto expone la aplicación web en el puerto `80` de la IP pública `104.154.143.133`.
+
+---
+
+## 5. Configuración de HTTPS y SSL (SecOps)
+
+Para proteger la transmisión de datos y asegurar el cumplimiento de confidencialidad en el flujo clínico, se configuró Nginx para forzar el uso de HTTPS (puerto 443) y WebSockets seguros (WSS).
+
+### A. Generación de Certificado SSL Autofirmado en la VM
+
+Dentro de la VM3, se debe crear la carpeta `certs` y generar un par de claves SSL:
+
+```bash
+# Crear directorio de certificados dentro de VM3
+mkdir -p certs
+
+# Generar clave privada y certificado autofirmado (válido por 365 días)
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout certs/nginx-selfsigned.key \
+  -out certs/nginx-selfsigned.crt \
+  -subj "/C=CL/ST=RM/L=Santiago/O=Clinica/CN=104.154.143.133"
+```
+
+### B. Pruebas de Conexión Segura
+
+Al acceder a `https://104.154.143.133`:
+- El navegador mostrará una advertencia de seguridad (debido al certificado autofirmado). Se debe proceder seleccionando "Avanzado" e "Ir a sitio no seguro".
+- El sitio cargará bajo protocolo seguro.
+- La biblioteca de Socket.io adaptará la conexión automáticamente para usar `wss://` (WebSockets sobre TLS).
