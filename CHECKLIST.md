@@ -20,8 +20,10 @@
 - [ ] Levantar el contenedor de la Base de Datos `db-local`:
   - [ ] Cargar esquema inicial (`init-local.sql`).
   - [ ] Validar que corra en PostgreSQL 16 con `wal_level = logical`.
+  - [ ] Crear usuario de base de datos con privilegios mínimos (ej. `app_user_local` con accesos restringidos a SELECT/INSERT/UPDATE en `fichas_pacientes`).
 - [ ] Levantar el contenedor `app-estaciones`:
-  - [ ] Comprobar conexión local con `db-local`.
+  - [ ] Comprobar conexión local con `db-local` usando el usuario de privilegios mínimos.
+  - [ ] Implementar la validación de rol (Médico o Enfermero) en los eventos de WebSocket (`consultar_paciente`, `actualizar_diagnostico`).
   - [ ] Verificar que el servidor de Socket.io escuche correctamente en el puerto `8001`.
 
 ### Fase 3: Configuración del Nodo Nube (VM 2) - _Responsables: Integrante 2 e Integrante 3_
@@ -30,8 +32,10 @@
 - [ ] Levantar el contenedor de la Base de Datos `db-nube`:
   - [ ] Cargar esquema inicial (`init-nube.sql`).
   - [ ] Validar que corra en PostgreSQL 16 con `wal_level = logical`.
+  - [ ] Crear usuario de base de datos con privilegios mínimos (ej. `app_user_nube` con accesos restringidos a SELECT/INSERT/UPDATE en `fichas_pacientes`).
 - [ ] Levantar el contenedor `app-terminales`:
-  - [ ] Comprobar conexión local con `db-nube`.
+  - [ ] Comprobar conexión local con `db-nube` usando el usuario de privilegios mínimos.
+  - [ ] Implementar la validación de rol (Administrativo) en los eventos de WebSocket (`admitir_paciente`).
   - [ ] Verificar que el servidor de Socket.io escuche correctamente en el puerto `8002`.
 
 ### Fase 4: Sincronización y Replicación Lógica - _Responsable: Integrante 3_
@@ -47,6 +51,9 @@
 ### Fase 5: Configuración de Gateway y Entrada (VM 3) - _Responsables: Integrante 4 e Integrante 3_
 
 - [ ] Clonar el repositorio en la **VM 3**.
+- [ ] Modificar el Frontend (`apps/frontend/index.html`):
+  - [ ] Agregar vista de login básico (simulando autenticación) para que el trabajador seleccione su Rol (Médico, Enfermero o Administrativo).
+  - [ ] Adjuntar el token o rol seleccionado en el payload de conexión inicial de Socket.io.
 - [ ] Modificar `nginx.conf` para cambiar las directivas `proxy_pass` usando las IPs privadas reales de las VMs:
   - [ ] Redirigir `/ws-medicas` a `http://10.128.0.10:8001`.
   - [ ] Redirigir `/ws-administrativas` a `http://10.128.0.20:8002`.

@@ -35,6 +35,24 @@ El sistema se distribuirá en **3 Máquinas Virtuales (VMs)** creadas en el mism
 
 ---
 
+## 🔐 Gestión de Autenticación y Autorización (Auth & Permisos)
+
+Al ser un sistema distribuido que maneja datos médicos altamente sensibles (fichas clínicas), el control de acceso y los permisos se gestionarán en tres niveles para garantizar una seguridad robusta:
+
+1. **Autenticación en el Cliente (Frontend) y Gateway (VM 3):**
+   - El **Frontend** proveerá un inicio de sesión básico (ej. por RUT y contraseña).
+   - Nginx (VM 3) actuará como primera barrera (seguridad perimetral) validando que las peticiones a los backends incluyan cabeceras de autorización adecuadas o usando credenciales de sesión.
+
+2. **Autorización basada en Roles (RBAC) en los Backends (VM 1 y VM 2):**
+   - La lógica de negocio validará el rol del usuario que envía peticiones WebSocket.
+   - **Backend de Estaciones Médicas (`app-estaciones` en VM 1):** Validará en cada evento (`consultar_paciente`, `actualizar_diagnostico`) que el usuario solicitante tenga el rol de **`Médico`** o **`Enfermero`**.
+   - **Backend de Terminales Administrativas (`app-terminales` en VM 2):** Validará en el evento de admisión (`admitir_paciente`) que el usuario tenga el rol de **`Administrativo`**.
+
+3. **Control de Acceso en Bases de Datos (VM 1 y VM 2):**
+   - Las conexiones entre las aplicaciones y sus bases de datos no usarán el usuario administrador por defecto (`postgres`). Se crearán usuarios de base de datos con privilegios mínimos necesarios (ej. un usuario `app_user` que solo tenga permisos de `SELECT`, `INSERT` y `UPDATE` en la tabla `fichas_pacientes`, bloqueando acciones destructivas como `DROP` o `DELETE`).
+
+---
+
 ## Plan de Trabajo por Integrante
 
 ### Integrante 1: Área Estaciones Médicas (Aplicación + BD Local en VM 1)
