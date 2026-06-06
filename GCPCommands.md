@@ -82,8 +82,9 @@ gcloud compute firewall-rules create allow-ssh \
 Ejecuta estos comandos para aprovisionar las 3 VMs con sus IPs estáticas respectivas. Todas vienen con un script de inicio (`startup-script`) para instalar Docker y Docker Compose V2 automáticamente.
 
 ### VM 1: Hospital Local (`vm-hospital-local`)
-* **IP Interna:** `10.128.0.10`
-* **Servicios:** `app-estaciones` (puerto 8001), `db-local` (puerto 5432)
+
+- **IP Interna:** `10.128.0.10`
+- **Servicios:** `app-estaciones` (puerto 8001), `db-local` (puerto 5432)
 
 ```bash
 gcloud compute instances create vm-hospital-local \
@@ -99,8 +100,9 @@ gcloud compute instances create vm-hospital-local \
 ```
 
 ### VM 2: Nube Central (`vm-nube-central`)
-* **IP Interna:** `10.128.0.20`
-* **Servicios:** `app-terminales` (puerto 8002), `db-nube` (puerto 5432)
+
+- **IP Interna:** `10.128.0.20`
+- **Servicios:** `app-terminales` (puerto 8002), `db-nube` (puerto 5432)
 
 ```bash
 gcloud compute instances create vm-nube-central \
@@ -116,8 +118,9 @@ gcloud compute instances create vm-nube-central \
 ```
 
 ### VM 3: Gateway (`vm-gateway`)
-* **IP Interna:** `10.128.0.30`
-* **Servicios:** `nginx-proxy` (puerto 80/443), Frontend (`index.html`)
+
+- **IP Interna:** `10.128.0.30`
+- **Servicios:** `nginx-proxy` (puerto 80/443), Frontend (`index.html`)
 
 ```bash
 gcloud compute instances create vm-gateway \
@@ -231,7 +234,7 @@ marianoemunozr@cloudshell:~ (os-ds-498615)$ gcloud compute instances describe $V
 ## FUNCIONAMIENTO GENERAL PARA USUARIOS
 
 ```bash
-# Encender VMs
+# Encender VMs (Ideal que enciendan solo la que van a usar para no gastar tanto)
 gcloud compute instances start vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
 
 # Ingresar mediante ssh (selecciona la que necesites administrar)
@@ -239,11 +242,15 @@ gcloud compute ssh vm-hospital-local --zone=us-central1-a
 gcloud compute ssh vm-nube-central --zone=us-central1-a
 gcloud compute ssh vm-gateway --zone=us-central1-a
 
-# Apagar VMs
+# Apagar VMs (fuera del SSH)
 gcloud compute instances stop vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
+```
 
-# Invitar nuevos usuarios al proyecto GCP (Reemplazar correo@gmail.com por el correo real)
-gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
-    --member="user:correo@gmail.com" \
-    --role="roles/editor"
+## Funcionamiento VM3
+
+```bash
+# Deben iniciar la VM3 -> vm-gateway
+# Una vez dentro deben hacer cd VM3 lo que llevara al codigo de la VM3
+# Ahi hacen `sudo docker-compose up -d` para iniciar los servicios (no es necesario --build)
+# Para poder ver y probar hay que ir al siguiente link osdsp3.epistia.cl ya que estoy usando un tunel de cloudflare con mi dominio para poder asegurar el HTTPS
 ```

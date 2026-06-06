@@ -85,6 +85,7 @@ Esto expone la aplicación web en el puerto `80` de la IP pública `104.154.143.
 Para evitar advertencias de seguridad en el navegador ("No seguro") y asegurar una encriptación TLS legitima de extremo a extremo sin exponer puertos publicos a internet, se integra Cloudflare Tunnel en la VM3. Esto permite acceder al sistema mediante el subdominio `osdsp3.epistia.cl`.
 
 ### A. Ventajas de Seguridad (SecOps)
+
 - **Cero puertos expuestos:** Se pueden cerrar los puertos de entrada 80 y 443 en el Firewall de GCP, ya que el contenedor de Cloudflare crea una conexion segura saliente hacia los servidores de Cloudflare.
 - **SSL Legitimo:** El certificado SSL/TLS es gestionado y firmado directamente por Cloudflare, mostrando el candado verde de conexion segura en cualquier navegador.
 - **Proteccion DDoS:** Cloudflare actua como proxy y escudo perimetral para mitigar ataques dirigidos al portal web.
