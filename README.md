@@ -96,13 +96,14 @@ Para evitar ciclos infinitos donde un dato replicado se re-publique de vuelta al
 
 ## 🚀 Despliegue de la Infraestructura
 
-Para levantar todo el entorno transversal (bases de datos, proxy y contenedores de aplicación base):
+### A. Simulación Local
+Para levantar todo el entorno local (bases de datos, proxy y contenedores de aplicación base):
 
 ```bash
 docker compose up --build -d
 ```
 
-### Comprobación de Servicios
+#### Comprobación de Servicios
 Una vez ejecutado, puedes verificar el estado de los contenedores mediante:
 ```bash
 docker compose ps
@@ -112,3 +113,21 @@ Puedes inspeccionar los logs de inicio de replicación en la nube para comprobar
 ```bash
 docker compose logs db-nube
 ```
+
+---
+
+### B. Despliegue de Producción Distribuido en Google Cloud Platform (GCP)
+Para entornos de producción reales en la nube, el sistema se divide en **3 Máquinas Virtuales (VMs)** conectadas en una red VPC común (`salud-vpc`):
+
+1. **VM 1: Hospital Local (`vm-hospital-local`)**
+   * **IP Interna**: `10.128.0.10`
+   * **Componentes**: `app-estaciones` (puerto `8001`), `db-local` (puerto `5432`).
+2. **VM 2: Nube Central (`vm-nube-central`)**
+   * **IP Interna**: `10.128.0.20`
+   * **Componentes**: `app-terminales` (puerto `8002`), `db-nube` (puerto `5432`).
+3. **VM 3: Gateway (`vm-gateway`)**
+   * **IP Interna**: `10.128.0.30` (IP Externa Pública Habilitada).
+   * **Componentes**: `nginx-proxy` (puertos `80` / `443`), Frontend estático.
+
+> [!NOTE]
+> Para consultar y ejecutar todos los comandos de `gcloud` relacionados con la creación de la red VPC, reglas de firewall, inicialización de VMs (Ubuntu Server 22.04 LTS + Docker) y accesos SSH, consulta la guía de infraestructura: [GCPCommands.md](file:///c:/Users/Administrator/Desktop/Proyecto-OSDS/GCPCommands.md).

@@ -8,7 +8,7 @@
   - [ ] Permitir puertos `8001` y `8002` (WebSockets) desde VM 3 hacia VM 1 y VM 2.
 - [ ] Configurar reglas de firewall externas:
   - [ ] Permitir puertos `80` (HTTP) y `443` (HTTPS) de forma pública en VM 3.
-- [ ] Crear las 3 VMs de Compute Engine (`e2-medium` o `e2-micro`, Debian 11/12):
+- [ ] Crear las 3 VMs de Compute Engine (`e2-medium` o `e2-micro`, Ubuntu Server 22.04 LTS):
   - [ ] **VM 1 (Hospital Local):** IP fija interna (ej. `10.128.0.10`).
   - [ ] **VM 2 (Nube Central):** IP fija interna (ej. `10.128.0.20`).
   - [ ] **VM 3 (Gateway & Frontend):** IP externa pública estática + IP fija interna (ej. `10.128.0.30`).

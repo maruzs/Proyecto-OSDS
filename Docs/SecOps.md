@@ -44,11 +44,25 @@ Se implementan cabeceras estándar para robustecer al navegador cliente frente a
 
 ## 3. Aislamiento Lógico de Redes
 
-La infraestructura del proyecto está segmentada en redes virtuales cerradas de Docker para simular zonas físicas e institucionales aisladas:
+El aislamiento y control de tráfico se ha diseñado para implementarse en dos niveles (Desarrollo Local y Producción en GCP):
 
+### A. Simulación y Desarrollo Local (Redes Docker)
+La infraestructura local está segmentada en redes virtuales cerradas utilizando el driver `bridge` de Docker para emular el aislamiento físico e institucional:
 1. **`hospital_net`**: Dedicada en exclusiva a la base de datos local y a la aplicación de Estaciones Médicas. Ningún servicio externo (salvo el proxy) puede ver o interactuar con este segmento.
 2. **`cloud_net`**: Simula la red virtual de nube donde corre la base de datos central y el terminal de admisiones.
-3. **`dmz_net` (Zona Desmilitarizada)**: Red expuesta al exterior que conecta a `nginx-proxy` con los servicios. Además, sirve como túnel dedicado para el tráfico interno de replicación entre las dos bases de datos, evitando exponer los puertos de bases de datos al host directamente.
+3. **`dmz_net` (Zona Desmilitarizada)**: Conecta a `nginx-proxy` con los servicios. Además, sirve como túnel dedicado para el tráfico interno de replicación entre las dos bases de datos, evitando exponer los puertos de bases de datos al host directamente.
+
+### B. Producción y Despliegue en GCP (Red VPC y Subredes)
+En Google Cloud Platform, el aislamiento se traslada a nivel de red virtual de nube:
+1. **VPC Personalizada (`salud-vpc`)**: Una red de nube virtual privada global con modo de subredes personalizado para evitar configuraciones por defecto descontroladas.
+2. **Subred Médica (`salud-subnet`)**: Rango `10.128.0.0/24` en `us-central1`, donde se configuran de forma estática las IPs internas de las VMs:
+   * **VM 1 (`vm-hospital-local`)**: `10.128.0.10`
+   * **VM 2 (`vm-nube-central`)**: `10.128.0.20`
+   * **VM 3 (`vm-gateway`)**: `10.128.0.30`
+3. **Reglas de Cortafuegos (Firewall GCP)**:
+   * **`allow-internal-salud`**: Permite la comunicación local y libre en los puertos necesarios (`5432`, `8001`, `8002`, `ICMP`) únicamente entre las IPs del rango `10.128.0.0/24`.
+   * **`allow-http-https`**: Expone de manera pública únicamente a la **VM 3 (Gateway)** bajo su IP externa mediante el uso de etiquetas de red (`http-server`, `https-server`).
+   * **`allow-ssh`**: Restringe o permite el acceso de gestión remota (puerto `22`) a las instancias.
 
 ---
 
