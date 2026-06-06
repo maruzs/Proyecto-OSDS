@@ -17,6 +17,7 @@ Se han completado todos los desarrollos correspondientes al **Integrante 4 (SecO
    
 3. **Frontend Interactivo**:
    - Desarrollada la interfaz moderna de control en [index.html](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/apps/frontend/index.html).
+   - **Rediseño Estético (Hospitalario)**: Se modificó la interfaz para adoptar una apariencia formal y profesional de clínica u hospital, reemplazando el esquema de colores oscuros por un fondo claro (`#f8fafc`), utilizando tipografías con tonos de color fijo oscuro para alta legibilidad, y eliminando degradados de texto y resplandores neón por acentos sólidos institucionales (azul clínico `#0284c7` y verde clínico `#0f766e`).
    - Incluye indicadores de estado para monitorear en tiempo real la conexión WebSocket de ambos servidores.
    - Proporciona formularios interactivos para:
      - **Estaciones Médicas**: Buscar fichas de paciente por RUT (DB Local) y actualizar su diagnóstico con cambios propagados instantáneamente.

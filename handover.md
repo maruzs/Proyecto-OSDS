@@ -4,9 +4,10 @@ Este documento sirve como guía para continuar el desarrollo del proyecto en otr
 
 ---
 
-## 狀態 Actual del Proyecto
+## Actual del Proyecto
 
 Se ha completado el rol del **Integrante 4 (Seguridad y QA)**:
+
 1. **Proxy Inverso (Nginx)**: Gateway configurado en [nginx.conf](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/config/nginx/nginx.conf) que enruta WebSockets `/ws-medicas` y `/ws-administrativas` a sus respectivos backends, y sirve el frontend en el puerto `80`.
 2. **Orquestación**: Integrado el servicio `nginx-proxy` en [docker-compose.yml](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/docker-compose.yml).
 3. **Frontend de Simulación**: Implementado en [apps/frontend/index.html](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/apps/frontend/index.html).
@@ -24,14 +25,18 @@ Se ha completado el rol del **Integrante 4 (Seguridad y QA)**:
 ## 🚀 Cómo Reanudar el Trabajo en la Nueva Máquina
 
 ### 1. Clonar y Levantar
+
 Asegúrate de tener Docker instalado en el nuevo equipo y ejecuta:
+
 ```bash
 # Levantar todos los servicios en segundo plano
 docker compose up --build -d
 ```
 
 ### 2. Probar Localmente
+
 Abre en tu navegador la dirección `http://localhost`. Podrás:
+
 - Interactuar con el panel de Estaciones Médicas y Terminales Administrativas.
 - Probar la comunicación por WebSockets en tiempo real.
 
@@ -42,6 +47,7 @@ Abre en tu navegador la dirección `http://localhost`. Podrás:
 Para realizar el despliegue usando únicamente **Cloud Shell**:
 
 1. **Configurar variables e infraestructura**:
+
    ```bash
    PROJECT_ID=$(gcloud config get-value project)
    ZONE="us-central1-a"
@@ -57,6 +63,7 @@ Para realizar el despliegue usando únicamente **Cloud Shell**:
    ```
 
 2. **Crear VM y Desplegar**:
+
    ```bash
    # Crear Instancia
    gcloud compute instances create $VM_NAME \
@@ -73,6 +80,7 @@ Para realizar el despliegue usando únicamente **Cloud Shell**:
    ```
 
 3. **Dentro de la VM**:
+
    ```bash
    git clone <URL_DE_TU_REPOSITORIO> Proyecto-OSDS
    cd Proyecto-OSDS

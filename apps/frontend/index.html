@@ -10,19 +10,19 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         :root {
-            --bg-color: #0b0f19;
-            --card-bg: rgba(17, 24, 39, 0.7);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --text-primary: #f3f4f6;
-            --text-secondary: #9ca3af;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
             
-            --primary-glow: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-            --secondary-glow: linear-gradient(135deg, #0ea5e9 0%, #10b981 100%);
+            --primary-glow: #0284c7;
+            --secondary-glow: #0f766e;
             
-            --color-success: #10b981;
-            --color-warning: #f59e0b;
-            --color-danger: #ef4444;
-            --color-info: #3b82f6;
+            --color-success: #16a34a;
+            --color-warning: #d97706;
+            --color-danger: #dc2626;
+            --color-info: #2563eb;
         }
 
         * {
@@ -41,31 +41,30 @@
             flex-direction: column;
             overflow-x: hidden;
             background-image: 
-                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+                radial-gradient(at 0% 0%, rgba(2, 132, 199, 0.06) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(15, 118, 110, 0.05) 0px, transparent 50%);
             background-attachment: fixed;
         }
 
         header {
-            padding: 2rem 4rem;
+            padding: 1.8rem 4rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid var(--border-color);
-            background: rgba(11, 15, 25, 0.5);
+            background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(12px);
             position: sticky;
             top: 0;
             z-index: 100;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
         }
 
         .logo-section h1 {
             font-family: 'Outfit', sans-serif;
             font-size: 1.8rem;
             font-weight: 800;
-            background: linear-gradient(to right, #6366f1, #a855f7, #0ea5e9);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #1e3a8a;
             letter-spacing: -0.5px;
         }
 
@@ -73,6 +72,7 @@
             font-size: 0.85rem;
             color: var(--text-secondary);
             margin-top: 0.2rem;
+            font-weight: 500;
         }
 
         .connection-status-bar {
@@ -81,15 +81,17 @@
         }
 
         .status-badge {
-            background: rgba(255, 255, 255, 0.03);
+            background: #ffffff;
             border: 1px solid var(--border-color);
-            padding: 0.5rem 1rem;
+            padding: 0.5rem 1.2rem;
             border-radius: 9999px;
             display: flex;
             align-items: center;
             gap: 0.6rem;
             font-size: 0.85rem;
-            font-weight: 500;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            color: #334155;
         }
 
         .status-dot {
@@ -144,8 +146,7 @@
             border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 2.5rem;
-            backdrop-filter: blur(16px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 10px 15px -3px rgba(15, 23, 42, 0.03);
             position: relative;
             overflow: hidden;
             display: flex;
@@ -180,17 +181,18 @@
         }
 
         .estaciones-card h2 {
-            color: #818cf8;
+            color: #0369a1;
         }
 
         .terminales-card h2 {
-            color: #38bdf8;
+            color: #0f766e;
         }
 
         .card-header p {
             color: var(--text-secondary);
             font-size: 0.9rem;
             margin-top: 0.4rem;
+            font-weight: 500;
         }
 
         .form-group {
@@ -200,27 +202,28 @@
         }
 
         label {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-secondary);
+            font-size: 0.825rem;
+            font-weight: 700;
+            color: #475569;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
         input, textarea, select {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-color);
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
             color: var(--text-primary);
             padding: 0.9rem 1.2rem;
             border-radius: 12px;
             font-size: 0.95rem;
             outline: none;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
         }
 
         input:focus, textarea:focus {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-            background: rgba(255, 255, 255, 0.05);
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+            background: #ffffff;
         }
 
         .btn {
@@ -234,28 +237,31 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         }
 
         .btn-primary {
-            background: var(--primary-glow);
+            background: #0284c7;
             color: white;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+            background: #0369a1;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.25);
         }
 
         .btn-secondary {
-            background: var(--secondary-glow);
+            background: #0f766e;
             color: white;
-            box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
+            box-shadow: 0 4px 12px rgba(15, 118, 110, 0.15);
         }
 
         .btn-secondary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(14, 165, 233, 0.4);
+            background: #115e59;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(15, 118, 110, 0.25);
         }
 
         .btn:active {
@@ -264,14 +270,15 @@
 
         /* Ficha Paciente Visualizer */
         .ficha-resultado {
-            border: 1px dashed var(--border-color);
+            border: 1px dashed #cbd5e1;
             border-radius: 16px;
             padding: 1.5rem;
-            background: rgba(255, 255, 255, 0.01);
+            background: #f8fafc;
             display: none;
             flex-direction: column;
             gap: 1.2rem;
             animation: fadeIn 0.4s ease;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
         }
 
         @keyframes fadeIn {
@@ -287,12 +294,13 @@
         }
 
         .ficha-label {
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-secondary);
         }
 
         .ficha-valor {
             color: var(--text-primary);
+            font-weight: 500;
         }
 
         .badge-origen {
@@ -305,20 +313,20 @@
         }
 
         .badge-local {
-            background: rgba(99, 102, 241, 0.15);
-            color: #818cf8;
-            border: 1px solid rgba(99, 102, 241, 0.3);
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
         }
 
         .badge-nube {
-            background: rgba(14, 165, 233, 0.15);
-            color: #38bdf8;
-            border: 1px solid rgba(14, 165, 233, 0.3);
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #bae6fd;
         }
 
         /* Admisiones Monitor */
         .admisiones-feed {
-            border: 1px solid var(--border-color);
+            border: 1px solid #e2e8f0;
             border-radius: 16px;
             height: 250px;
             overflow-y: auto;
@@ -326,18 +334,20 @@
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
-            background: rgba(0, 0, 0, 0.15);
+            background: #f8fafc;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
         }
 
         .feed-item {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--border-color);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
             border-radius: 12px;
             padding: 1rem;
             display: flex;
             flex-direction: column;
             gap: 0.4rem;
             animation: slideIn 0.3s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
         }
 
         @keyframes slideIn {
@@ -354,11 +364,13 @@
         .feed-item-name {
             font-weight: 700;
             font-size: 0.95rem;
+            color: #0f172a;
         }
 
         .feed-item-time {
             font-size: 0.75rem;
             color: var(--text-secondary);
+            font-weight: 500;
         }
 
         .feed-item-details {
@@ -378,17 +390,19 @@
         }
 
         .toast {
-            background: rgba(17, 24, 39, 0.9);
-            border: 1px solid var(--border-color);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
             padding: 1rem 1.5rem;
             border-radius: 12px;
-            color: white;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            color: #0f172a;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
             display: flex;
             align-items: center;
             gap: 0.8rem;
             backdrop-filter: blur(8px);
             animation: toastIn 0.3s ease forwards;
+            font-weight: 600;
+            font-size: 0.9rem;
         }
 
         @keyframes toastIn {
@@ -406,8 +420,9 @@
             color: var(--text-secondary);
             font-size: 0.85rem;
             border-top: 1px solid var(--border-color);
-            background: rgba(11, 15, 25, 0.3);
+            background: #ffffff;
             margin-top: auto;
+            font-weight: 500;
         }
     </style>
 </head>
