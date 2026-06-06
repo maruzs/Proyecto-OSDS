@@ -231,18 +231,19 @@ marianoemunozr@cloudshell:~ (os-ds-498615)$ gcloud compute instances describe $V
 ## FUNCIONAMIENTO GENERAL PARA USUARIOS
 
 ```bash
-# Encender VM
-gcloud compute instances start salud-distribuida-vm --zone=us-central1-a
+# Encender VMs
+gcloud compute instances start vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
 
-# Ingresar mediante ssh
-gcloud compute ssh salud-distribuida-vm --zone=us-central1-a
+# Ingresar mediante ssh (selecciona la que necesites administrar)
+gcloud compute ssh vm-hospital-local --zone=us-central1-a
+gcloud compute ssh vm-nube-central --zone=us-central1-a
+gcloud compute ssh vm-gateway --zone=us-central1-a
 
-# Apagar VM
-gcloud compute instances stop salud-distribuida-vm --zone=us-central1-a
+# Apagar VMs
+gcloud compute instances stop vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
 
-# Invitar nuevos usuarios (Reemplazar correo@gmail.com por el correo real)
-gcloud projects add-iam-policy-binding os-ds-498615 \
+# Invitar nuevos usuarios al proyecto GCP (Reemplazar correo@gmail.com por el correo real)
+gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
     --member="user:correo@gmail.com" \
     --role="roles/editor"
-
 ```
