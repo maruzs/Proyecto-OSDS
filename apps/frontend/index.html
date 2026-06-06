@@ -3,26 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador de Centro de Salud Distribuido</title>
+    <title>Centro de Salud Digital - Terminal Distribuida</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         :root {
-            --bg-color: #f8fafc;
+            --bg-color: #f1f5f9;
             --card-bg: #ffffff;
-            --border-color: #e2e8f0;
+            --border-color: #cbd5e1;
             --text-primary: #0f172a;
             --text-secondary: #475569;
             
-            --primary-glow: #0284c7;
-            --secondary-glow: #0f766e;
+            --primary-glow: #0284c7; /* Azul Clínico */
+            --secondary-glow: #0d9488; /* Verde Hospitalario */
             
-            --color-success: #16a34a;
-            --color-warning: #d97706;
-            --color-danger: #dc2626;
-            --color-info: #2563eb;
+            --color-success: #15803d;
+            --color-warning: #b45309;
+            --color-danger: #b91c1c;
+            --color-info: #1d4ed8;
         }
 
         * {
@@ -30,7 +30,7 @@
             margin: 0;
             padding: 0;
             font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.2s ease-in-out;
         }
 
         body {
@@ -41,19 +41,61 @@
             flex-direction: column;
             overflow-x: hidden;
             background-image: 
-                radial-gradient(at 0% 0%, rgba(2, 132, 199, 0.06) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(15, 118, 110, 0.05) 0px, transparent 50%);
+                radial-gradient(at 0% 0%, rgba(2, 132, 199, 0.04) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(13, 148, 136, 0.04) 0px, transparent 50%);
             background-attachment: fixed;
         }
 
+        /* --- LOGIN CONTAINER --- */
+        #login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            padding: 2rem;
+        }
+
+        .login-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 3rem;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+            text-align: center;
+            border-top: 5px solid var(--primary-glow);
+        }
+
+        .login-card h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.75rem;
+            color: #1e3a8a;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        .login-card p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        /* --- APP CONTAINER (DASHBOARD) --- */
+        #app-container {
+            display: none; /* Se muestra post-login */
+            flex-direction: column;
+            flex: 1;
+        }
+
         header {
-            padding: 1.8rem 4rem;
+            padding: 1.2rem 3rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid var(--border-color);
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(12px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
             position: sticky;
             top: 0;
             z-index: 100;
@@ -62,36 +104,68 @@
 
         .logo-section h1 {
             font-family: 'Outfit', sans-serif;
-            font-size: 1.8rem;
-            font-weight: 800;
+            font-size: 1.4rem;
+            font-weight: 700;
             color: #1e3a8a;
             letter-spacing: -0.5px;
         }
 
         .logo-section p {
-            font-size: 0.85rem;
+            font-size: 0.75rem;
             color: var(--text-secondary);
-            margin-top: 0.2rem;
             font-weight: 500;
         }
 
-        .connection-status-bar {
+        .user-status-bar {
             display: flex;
-            gap: 1.5rem;
+            align-items: center;
+            gap: 1.2rem;
+        }
+
+        .user-badge {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .role-tag {
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .role-tag.admin {
+            background: #ccfbf1;
+            color: #0f766e;
+        }
+
+        .connection-status {
+            display: flex;
+            gap: 0.8rem;
         }
 
         .status-badge {
             background: #ffffff;
             border: 1px solid var(--border-color);
-            padding: 0.5rem 1.2rem;
-            border-radius: 9999px;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
             display: flex;
             align-items: center;
-            gap: 0.6rem;
-            font-size: 0.85rem;
+            gap: 0.4rem;
+            font-size: 0.8rem;
             font-weight: 600;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-            color: #334155;
+            color: #475569;
         }
 
         .status-dot {
@@ -99,7 +173,7 @@
             height: 8px;
             border-radius: 50%;
             display: inline-block;
-            box-shadow: 0 0 8px currentColor;
+            box-shadow: 0 0 6px currentColor;
         }
 
         .status-connected {
@@ -119,90 +193,56 @@
 
         main {
             flex: 1;
-            padding: 3rem 4rem;
-            max-width: 1600px;
+            padding: 2rem 3rem;
+            max-width: 1400px;
             width: 100%;
             margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2.5rem;
-        }
-
-        @media (max-width: 1024px) {
-            main {
-                grid-template-columns: 1fr;
-                padding: 1.5rem;
-            }
-            header {
-                padding: 1.5rem;
-                flex-direction: column;
-                gap: 1rem;
-                text-align: center;
-            }
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
         }
 
         .card {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
-            border-radius: 24px;
-            padding: 2.5rem;
-            box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 10px 15px -3px rgba(15, 23, 42, 0.03);
-            position: relative;
-            overflow: hidden;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
             display: flex;
             flex-direction: column;
-            gap: 1.8rem;
+            gap: 1.5rem;
+            border-top: 4px solid var(--border-color);
         }
 
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
+        .estaciones-card {
+            border-top-color: var(--primary-glow);
         }
 
-        .estaciones-card::before {
-            background: var(--primary-glow);
-        }
-
-        .terminales-card::before {
-            background: var(--secondary-glow);
+        .terminales-card {
+            border-top-color: var(--secondary-glow);
         }
 
         .card-header h2 {
             font-family: 'Outfit', sans-serif;
-            font-size: 1.5rem;
+            font-size: 1.35rem;
             font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .estaciones-card h2 {
-            color: #0369a1;
-        }
-
-        .terminales-card h2 {
-            color: #0f766e;
+            color: #1e3a8a;
         }
 
         .card-header p {
             color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-top: 0.4rem;
-            font-weight: 500;
+            font-size: 0.85rem;
+            margin-top: 0.2rem;
         }
 
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.4rem;
         }
 
         label {
-            font-size: 0.825rem;
+            font-size: 0.75rem;
             font-weight: 700;
             color: #475569;
             text-transform: uppercase;
@@ -213,84 +253,81 @@
             background: #ffffff;
             border: 1px solid #cbd5e1;
             color: var(--text-primary);
-            padding: 0.9rem 1.2rem;
-            border-radius: 12px;
-            font-size: 0.95rem;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
             outline: none;
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
         }
 
-        input:focus, textarea:focus {
+        input:focus, textarea:focus, select:focus {
             border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .btn {
-            padding: 1rem 1.5rem;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 0.95rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
             cursor: pointer;
             border: none;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         }
 
         .btn-primary {
-            background: #0284c7;
+            background: var(--primary-glow);
             color: white;
-            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
         }
 
         .btn-primary:hover {
-            background: #0369a1;
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.25);
+            background: #0270a5;
         }
 
         .btn-secondary {
-            background: #0f766e;
+            background: var(--secondary-glow);
             color: white;
-            box-shadow: 0 4px 12px rgba(15, 118, 110, 0.15);
         }
 
         .btn-secondary:hover {
-            background: #115e59;
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(15, 118, 110, 0.25);
+            background: #0b7a70;
         }
 
-        .btn:active {
-            transform: translateY(0);
+        .btn-danger {
+            background: #fee2e2;
+            color: var(--color-danger);
+            border: 1px solid #fecaca;
+        }
+
+        .btn-danger:hover {
+            background: #fca5a5;
+            color: white;
         }
 
         /* Ficha Paciente Visualizer */
         .ficha-resultado {
-            border: 1px dashed #cbd5e1;
-            border-radius: 16px;
-            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.2rem;
             background: #f8fafc;
             display: none;
             flex-direction: column;
-            gap: 1.2rem;
-            animation: fadeIn 0.4s ease;
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+            gap: 1rem;
+            animation: fadeIn 0.25s ease-out;
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         .ficha-info-grid {
             display: grid;
             grid-template-columns: auto 1fr;
-            gap: 0.8rem 1.5rem;
-            font-size: 0.95rem;
+            gap: 0.6rem 1.2rem;
+            font-size: 0.9rem;
         }
 
         .ficha-label {
@@ -304,9 +341,9 @@
         }
 
         .badge-origen {
-            padding: 0.2rem 0.6rem;
-            border-radius: 6px;
-            font-size: 0.75rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
             font-weight: 700;
             text-transform: uppercase;
             display: inline-block;
@@ -324,34 +361,32 @@
             border: 1px solid #bae6fd;
         }
 
-        /* Admisiones Monitor */
+        /* Feed Admisiones */
         .admisiones-feed {
-            border: 1px solid #e2e8f0;
-            border-radius: 16px;
-            height: 250px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            height: 200px;
             overflow-y: auto;
-            padding: 1rem;
+            padding: 0.8rem;
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
+            gap: 0.6rem;
             background: #f8fafc;
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
         }
 
         .feed-item {
             background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.8rem;
             display: flex;
             flex-direction: column;
-            gap: 0.4rem;
-            animation: slideIn 0.3s ease;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+            gap: 0.3rem;
+            animation: slideIn 0.2s ease-out;
         }
 
         @keyframes slideIn {
-            from { opacity: 0; transform: translateX(20px); }
+            from { opacity: 0; transform: translateX(10px); }
             to { opacity: 1; transform: translateX(0); }
         }
 
@@ -363,50 +398,48 @@
 
         .feed-item-name {
             font-weight: 700;
-            font-size: 0.95rem;
-            color: #0f172a;
+            font-size: 0.85rem;
+            color: #1e293b;
         }
 
         .feed-item-time {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: var(--text-secondary);
-            font-weight: 500;
         }
 
         .feed-item-details {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: var(--text-secondary);
         }
 
-        /* Alert Toast */
+        /* Toast Container */
         .toast-container {
             position: fixed;
             bottom: 2rem;
             right: 2rem;
             display: flex;
             flex-direction: column;
-            gap: 0.8rem;
+            gap: 0.6rem;
             z-index: 1000;
         }
 
         .toast {
             background: #ffffff;
-            border: 1px solid #e2e8f0;
-            padding: 1rem 1.5rem;
-            border-radius: 12px;
-            color: #0f172a;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+            border: 1px solid var(--border-color);
+            padding: 0.8rem 1.2rem;
+            border-radius: 8px;
+            color: #1e293b;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             display: flex;
             align-items: center;
-            gap: 0.8rem;
-            backdrop-filter: blur(8px);
-            animation: toastIn 0.3s ease forwards;
+            gap: 0.6rem;
             font-weight: 600;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            animation: toastIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
 
         @keyframes toastIn {
-            from { transform: translateY(100%); opacity: 0; }
+            from { transform: translateY(50%); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
 
@@ -415,10 +448,10 @@
         .toast-info { border-left: 4px solid var(--color-info); }
 
         footer {
-            padding: 2rem;
+            padding: 1.5rem;
             text-align: center;
             color: var(--text-secondary);
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             border-top: 1px solid var(--border-color);
             background: #ffffff;
             margin-top: auto;
@@ -428,260 +461,383 @@
 </head>
 <body>
 
-    <header>
-        <div class="logo-section">
-            <h1>CENTRO DE SALUD DISTRIBUIDO</h1>
-            <p>Simulación e Infraestructura Transversal Híbrida - Proxy Seguro Nginx</p>
-        </div>
-        
-        <div class="connection-status-bar">
-            <div class="status-badge" id="status-medicas">
-                <span class="status-dot status-disconnected" id="dot-medicas"></span>
-                <span>Estaciones Médicas (Local)</span>
-            </div>
-            <div class="status-badge" id="status-administrativas">
-                <span class="status-dot status-disconnected" id="dot-administrativas"></span>
-                <span>Terminales Adm. (Nube)</span>
-            </div>
-        </div>
-    </header>
-
-    <main>
-        <!-- Estaciones Medicas Panel -->
-        <section class="card estaciones-card">
-            <div class="card-header">
-                <h2>⚕️ Estaciones Médicas (Fichas Clínicas)</h2>
-                <p>Simula el entorno clínico local. Permite buscar fichas por RUT y actualizar diagnósticos.</p>
-            </div>
-
-            <div class="form-group">
-                <label for="buscar-rut">Consultar Ficha Paciente</label>
-                <div style="display: flex; gap: 0.5rem;">
-                    <input type="text" id="buscar-rut" placeholder="Ej: 12345678-9" style="flex: 1;">
-                    <button class="btn btn-primary" id="btn-buscar">Buscar</button>
-                </div>
-            </div>
-
-            <!-- Ficha Detalle -->
-            <div class="ficha-resultado" id="ficha-box">
-                <div class="ficha-info-grid">
-                    <span class="ficha-label">ID Único:</span>
-                    <span class="ficha-valor" id="ficha-id" style="font-family: monospace; font-size: 0.85rem;">-</span>
-                    
-                    <span class="ficha-label">Nombre Completo:</span>
-                    <span class="ficha-valor" id="ficha-nombre">-</span>
-                    
-                    <span class="ficha-label">RUT:</span>
-                    <span class="ficha-valor" id="ficha-rut">-</span>
-                    
-                    <span class="ficha-label">Origen de Ficha:</span>
-                    <span class="ficha-valor"><span id="ficha-origen" class="badge-origen badge-local">Local</span></span>
-                    
-                    <span class="ficha-label">Última Modificación:</span>
-                    <span class="ficha-valor" id="ficha-fecha" style="font-size: 0.85rem;">-</span>
-                </div>
-
-                <div class="form-group" style="margin-top: 1rem;">
-                    <label for="diagnostico-input">Diagnóstico y Receta Médica</label>
-                    <textarea id="diagnostico-input" rows="4" placeholder="Ingrese el nuevo diagnóstico y tratamiento..."></textarea>
-                </div>
-
-                <button class="btn btn-primary" id="btn-actualizar">
-                    Actualizar Diagnóstico
-                </button>
-            </div>
-        </section>
-
-        <!-- Terminales Administrativas Panel -->
-        <section class="card terminales-card">
-            <div class="card-header">
-                <h2>📋 Terminales Administrativas (Admisiones)</h2>
-                <p>Simula el entorno administrativo de la nube. Registra nuevos pacientes de admisión.</p>
-            </div>
-
-            <form id="form-admision" onsubmit="event.preventDefault(); admitirPaciente();" style="display: flex; flex-direction: column; gap: 1.2rem;">
+    <!-- --- SECCIÓN DE ACCESO / LOGIN --- -->
+    <div id="login-container">
+        <div class="login-card">
+            <h2>Acceso a Terminal Clínica</h2>
+            <p>Por favor seleccione su rol para ingresar al sistema distribuido.</p>
+            
+            <form onsubmit="event.preventDefault(); ingresarSistema();" style="display: flex; flex-direction: column; gap: 1.2rem; text-align: left;">
                 <div class="form-group">
-                    <label for="adm-rut">RUT del Paciente</label>
-                    <input type="text" id="adm-rut" placeholder="Ej: 12345678-9" required>
+                    <label for="login-name">Nombre del Profesional</label>
+                    <input type="text" id="login-name" placeholder="Ej: Dr. Pérez" required>
                 </div>
-
+                
                 <div class="form-group">
-                    <label for="adm-nombre">Nombre Completo</label>
-                    <input type="text" id="adm-nombre" placeholder="Nombre y Apellido" required>
+                    <label for="login-role">Rol Asignado</label>
+                    <select id="login-role" required>
+                        <option value="" disabled selected>Seleccione su rol...</option>
+                        <option value="medico">Médico (Estaciones Clínicas)</option>
+                        <option value="enfermero">Enfermero (Estaciones Clínicas)</option>
+                        <option value="administrativo">Administrativo (Mesón / Admisiones)</option>
+                    </select>
                 </div>
-
-                <div class="form-group">
-                    <label for="adm-diagnostico">Motivo de Admisión / Diagnóstico Inicial</label>
-                    <textarea id="adm-diagnostico" rows="2" placeholder="Paciente ingresa por dolor de cabeza leve..."></textarea>
-                </div>
-
-                <button type="submit" class="btn btn-secondary" id="btn-admitir">
-                    Admitir y Registrar en Nube
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
+                    Ingresar al Sistema
                 </button>
             </form>
+        </div>
+    </div>
 
-            <div class="form-group">
-                <label>Feed de Admisiones en Tiempo Real (Nube)</label>
-                <div class="admisiones-feed" id="admisiones-feed">
-                    <!-- Dinámico -->
+    <!-- --- CONTENEDOR PRINCIPAL DE LA APLICACIÓN --- -->
+    <div id="app-container">
+        <header>
+            <div class="logo-section">
+                <h1>CENTRO DE SALUD DIGITAL</h1>
+                <p>Terminal Distribuida de Alta Disponibilidad</p>
+            </div>
+            
+            <div class="user-status-bar">
+                <div class="user-badge">
+                    <span>👤 <strong id="header-user-name">-</strong></span>
+                    <span class="role-tag" id="header-user-role">-</span>
+                </div>
+                
+                <button class="btn btn-danger" onclick="cerrarSesion()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                    Cerrar Sesión
+                </button>
+                
+                <div class="connection-status">
+                    <div class="status-badge" id="status-medicas" style="display: none;">
+                        <span class="status-dot status-disconnected" id="dot-medicas"></span>
+                        <span>Estaciones Médicas (Local)</span>
+                    </div>
+                    <div class="status-badge" id="status-administrativas" style="display: none;">
+                        <span class="status-dot status-disconnected" id="dot-administrativas"></span>
+                        <span>Terminales Adm. (Nube)</span>
+                    </div>
                 </div>
             </div>
-        </section>
-    </main>
+        </header>
 
-    <div class="toast-container" id="toast-container"></div>
+        <main>
+            <!-- Panel Estaciones Médicas (Solo para Médicos y Enfermeros) -->
+            <section class="card estaciones-card" id="panel-estaciones" style="display: none;">
+                <div class="card-header">
+                    <h2>⚕️ Estaciones Médicas (Consulta y Ficha Clínica)</h2>
+                    <p>Acceso a datos locales del Hospital. Permite consultar fichas y registrar diagnósticos.</p>
+                </div>
 
-    <footer>
-        <p>Universidad OSDS | Sistemas Operativos y Distribuidos - Proyecto Unidad 2</p>
-    </footer>
+                <div class="form-group">
+                    <label for="buscar-rut">Consultar Ficha Paciente</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="buscar-rut" placeholder="Ej: 12345678-9" style="flex: 1;">
+                        <button class="btn btn-primary" id="btn-buscar">Buscar Ficha</button>
+                    </div>
+                </div>
+
+                <!-- Detalle Ficha -->
+                <div class="ficha-resultado" id="ficha-box">
+                    <div class="ficha-info-grid">
+                        <span class="ficha-label">ID Registro:</span>
+                        <span class="ficha-valor" id="ficha-id" style="font-family: monospace; font-size: 0.8rem;">-</span>
+                        
+                        <span class="ficha-label">Nombre Paciente:</span>
+                        <span class="ficha-valor" id="ficha-nombre">-</span>
+                        
+                        <span class="ficha-label">RUT:</span>
+                        <span class="ficha-valor" id="ficha-rut">-</span>
+                        
+                        <span class="ficha-label">Origen Registro:</span>
+                        <span class="ficha-valor"><span id="ficha-origen" class="badge-origen badge-local">Local</span></span>
+                        
+                        <span class="ficha-label">Última Actualización:</span>
+                        <span class="ficha-valor" id="ficha-fecha">-</span>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 0.8rem;">
+                        <label for="diagnostico-input">Diagnóstico y Prescripción Médica</label>
+                        <textarea id="diagnostico-input" rows="4" placeholder="Ingrese los detalles clínicos de la atención..."></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" id="btn-actualizar">
+                        Guardar Cambios Clínicos
+                    </button>
+                </div>
+            </section>
+
+            <!-- Panel Terminales Administrativas (Solo para Administrativos) -->
+            <section class="card terminales-card" id="panel-terminales" style="display: none;">
+                <div class="card-header">
+                    <h2>📋 Terminales Administrativas (Ingreso de Pacientes)</h2>
+                    <p>Acceso a datos core en la Nube. Permite admitir pacientes al flujo del establecimiento.</p>
+                </div>
+
+                <form id="form-admision" onsubmit="event.preventDefault(); admitirPaciente();" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="adm-rut">RUT Paciente</label>
+                        <input type="text" id="adm-rut" placeholder="Ej: 12345678-9" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adm-nombre">Nombre Completo</label>
+                        <input type="text" id="adm-nombre" placeholder="Nombres y Apellidos" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adm-diagnostico">Motivo del Ingreso / Diagnóstico Preliminar</label>
+                        <textarea id="adm-diagnostico" rows="2" placeholder="Paciente se presenta a urgencias por sintomatología..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-secondary" id="btn-admitir">
+                        Admitir Paciente en Nube
+                    </button>
+                </form>
+
+                <div class="form-group">
+                    <label>Registro Reciente de Admisiones (Feed en Tiempo Real)</label>
+                    <div class="admisiones-feed" id="admisiones-feed">
+                        <!-- Items dinámicos -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <div class="toast-container" id="toast-container"></div>
+
+        <footer>
+            <p>Universidad OSDS | Unidad de Infraestructura Transversal y Sistemas Distribuidos</p>
+        </footer>
+    </div>
 
     <script>
-        // Inicializar sockets apuntando a las rutas del proxy Nginx
-        const socketMedicas = io({
-            path: '/ws-medicas'
-        });
+        let socketMedicas = null;
+        let socketAdministrativas = null;
+        let usuarioActual = null;
+        let rolActual = null;
 
-        const socketAdministrativas = io({
-            path: '/ws-administrativas'
-        });
+        function ingresarSistema() {
+            const nombre = document.getElementById('login-name').value.trim();
+            const rol = document.getElementById('login-role').value;
+            
+            if (!nombre || !rol) return;
+            
+            usuarioActual = nombre;
+            rolActual = rol;
+            
+            // Ocultar login, mostrar dashboard
+            document.getElementById('login-container').style.display = 'none';
+            document.getElementById('app-container').style.display = 'flex';
+            
+            // Actualizar datos del header
+            document.getElementById('header-user-name').textContent = usuarioActual;
+            const roleTag = document.getElementById('header-user-role');
+            roleTag.textContent = rolActual === 'medico' ? 'Médico' : rolActual === 'enfermero' ? 'Enfermero' : 'Administrativo';
+            if (rolActual === 'administrativo') {
+                roleTag.classList.add('admin');
+            } else {
+                roleTag.classList.remove('admin');
+            }
+            
+            // Configurar Vistas por Rol e inicializar Sockets
+            inicializarVistasYSockets(rolActual);
+        }
 
-        // Manejo de Estados de Conexión
-        socketMedicas.on('connect', () => {
-            const dot = document.getElementById('dot-medicas');
-            dot.className = 'status-dot status-connected';
-            showToast('Conectado a Estaciones Médicas', 'info');
-        });
+        function cerrarSesion() {
+            // Desconectar Sockets
+            if (socketMedicas) {
+                socketMedicas.disconnect();
+                socketMedicas = null;
+            }
+            if (socketAdministrativas) {
+                socketAdministrativas.disconnect();
+                socketAdministrativas = null;
+            }
+            
+            // Ocultar badges de conexión
+            document.getElementById('status-medicas').style.display = 'none';
+            document.getElementById('status-administrativas').style.display = 'none';
+            
+            // Limpiar datos
+            usuarioActual = null;
+            rolActual = null;
+            
+            // Ocultar paneles
+            document.getElementById('panel-estaciones').style.display = 'none';
+            document.getElementById('panel-terminales').style.display = 'none';
+            document.getElementById('ficha-box').style.display = 'none';
+            document.getElementById('buscar-rut').value = '';
+            document.getElementById('form-admision').reset();
+            document.getElementById('admisiones-feed').innerHTML = '';
+            
+            // Volver al login
+            document.getElementById('app-container').style.display = 'none';
+            document.getElementById('login-container').style.display = 'flex';
+        }
 
-        socketMedicas.on('disconnect', () => {
-            const dot = document.getElementById('dot-medicas');
-            dot.className = 'status-dot status-disconnected';
-            showToast('Desconectado de Estaciones Médicas', 'error');
-        });
+        function inicializarVistasYSockets(rol) {
+            if (rol === 'medico' || rol === 'enfermero') {
+                document.getElementById('panel-estaciones').style.display = 'flex';
+                document.getElementById('status-medicas').style.display = 'flex';
+                
+                // Conectar al socket de Estaciones Médicas
+                socketMedicas = io({
+                    path: '/ws-medicas',
+                    auth: { token: 'clinica-local-auth', rol: rol, usuario: usuarioActual }
+                });
+                
+                configurarSocketMedicas();
+                
+            } else if (rol === 'administrativo') {
+                document.getElementById('panel-terminales').style.display = 'flex';
+                document.getElementById('status-administrativas').style.display = 'flex';
+                
+                // Conectar al socket de Terminales Administrativas
+                socketAdministrativas = io({
+                    path: '/ws-administrativas',
+                    auth: { token: 'clinica-cloud-auth', rol: rol, usuario: usuarioActual }
+                });
+                
+                configurarSocketAdministrativas();
+            }
+        }
 
-        socketAdministrativas.on('connect', () => {
-            const dot = document.getElementById('dot-administrativas');
-            dot.className = 'status-dot status-connected';
-            showToast('Conectado a Terminales Administrativas', 'info');
-        });
+        // --- MANEJO DE EVENTOS WEBSOCKET: ESTACIONES MÉDICAS ---
+        function configurarSocketMedicas() {
+            socketMedicas.on('connect', () => {
+                const dot = document.getElementById('dot-medicas');
+                dot.className = 'status-dot status-connected';
+                showToast('Conectado al Servidor de Estaciones Médicas (Local)', 'info');
+            });
 
-        socketAdministrativas.on('disconnect', () => {
-            const dot = document.getElementById('dot-administrativas');
-            dot.className = 'status-dot status-disconnected';
-            showToast('Desconectado de Terminales Administrativas', 'error');
-        });
+            socketMedicas.on('disconnect', () => {
+                const dot = document.getElementById('dot-medicas');
+                dot.className = 'status-dot status-disconnected';
+                showToast('Desconectado de Estaciones Médicas', 'error');
+            });
 
-        // --- MÓDULO ESTACIONES MÉDICAS ---
-        const btnBuscar = document.getElementById('btn-buscar');
-        const buscarRut = document.getElementById('buscar-rut');
-        const fichaBox = document.getElementById('ficha-box');
-        
-        // Elementos visuales de la ficha
-        const fId = document.getElementById('ficha-id');
-        const fNombre = document.getElementById('ficha-nombre');
-        const fRut = document.getElementById('ficha-rut');
-        const fOrigen = document.getElementById('ficha-origen');
-        const fFecha = document.getElementById('ficha-fecha');
-        const fDiagnostico = document.getElementById('diagnostico-input');
-        const btnActualizar = document.getElementById('btn-actualizar');
+            socketMedicas.on('ficha_paciente', (res) => {
+                const fichaBox = document.getElementById('ficha-box');
+                if (res.estado === 'OK') {
+                    fichaBox.style.display = 'flex';
+                    document.getElementById('ficha-id').textContent = res.datos.id;
+                    document.getElementById('ficha-nombre').textContent = res.datos.nombre;
+                    document.getElementById('ficha-rut').textContent = res.datos.rut;
+                    
+                    const fOrigen = document.getElementById('ficha-origen');
+                    fOrigen.textContent = res.datos.origen_registro;
+                    fOrigen.className = `badge-origen badge-${res.datos.origen_registro}`;
+                    
+                    document.getElementById('ficha-fecha').textContent = new Date(res.datos.fecha_actualizacion).toLocaleString();
+                    document.getElementById('diagnostico-input').value = res.datos.diagnostico || '';
+                    showToast('Ficha clínica cargada', 'success');
+                } else if (res.estado === 'NO_ENCONTRADO') {
+                    fichaBox.style.display = 'none';
+                    showToast('Paciente no encontrado en el servidor local', 'error');
+                } else {
+                    fichaBox.style.display = 'none';
+                    showToast(`Error al consultar: ${res.mensaje}`, 'error');
+                }
+            });
 
-        btnBuscar.addEventListener('click', () => {
-            const rut = buscarRut.value.trim();
+            socketMedicas.on('diagnostico_actualizado', (res) => {
+                if (res.estado === 'OK') {
+                    document.getElementById('ficha-fecha').textContent = new Date(res.datos.fecha_actualizacion).toLocaleString();
+                    showToast('Diagnóstico guardado correctamente en DB Local', 'success');
+                } else {
+                    showToast(`Error al actualizar diagnóstico: ${res.mensaje}`, 'error');
+                }
+            });
+        }
+
+        // Event Listeners para panel clínico
+        document.getElementById('btn-buscar').addEventListener('click', () => {
+            const rut = document.getElementById('buscar-rut').value.trim();
             if (!rut) {
-                showToast('Ingrese un RUT para buscar', 'error');
+                showToast('Ingrese un RUT para realizar la consulta', 'error');
                 return;
             }
-            socketMedicas.emit('consultar_paciente', { rut });
-        });
-
-        socketMedicas.on('ficha_paciente', (res) => {
-            if (res.estado === 'OK') {
-                fichaBox.style.display = 'flex';
-                fId.textContent = res.datos.id;
-                fNombre.textContent = res.datos.nombre;
-                fRut.textContent = res.datos.rut;
-                
-                fOrigen.textContent = res.datos.origen_registro;
-                fOrigen.className = `badge-origen badge-${res.datos.origen_registro}`;
-                
-                fFecha.textContent = new Date(res.datos.fecha_actualizacion).toLocaleString();
-                fDiagnostico.value = res.datos.diagnostico || '';
-                
-                showToast('Ficha de paciente cargada', 'success');
-            } else if (res.estado === 'NO_ENCONTRADO') {
-                fichaBox.style.display = 'none';
-                showToast('Paciente no encontrado en base de datos local', 'error');
+            if (socketMedicas && socketMedicas.connected) {
+                socketMedicas.emit('consultar_paciente', { rut, rol: rolActual, usuario: usuarioActual });
             } else {
-                fichaBox.style.display = 'none';
-                showToast(`Error al consultar: ${res.mensaje}`, 'error');
+                showToast('Sin conexión con el servidor local', 'error');
             }
         });
 
-        btnActualizar.addEventListener('click', () => {
-            const id = fId.textContent;
-            const diagnostico = fDiagnostico.value.trim();
+        document.getElementById('btn-actualizar').addEventListener('click', () => {
+            const id = document.getElementById('ficha-id').textContent;
+            const diagnostico = document.getElementById('diagnostico-input').value.trim();
             if (!diagnostico) {
-                showToast('El diagnóstico no puede estar vacío', 'error');
+                showToast('El diagnóstico no puede guardarse vacío', 'error');
                 return;
             }
-            socketMedicas.emit('actualizar_diagnostico', { id, diagnostico });
-        });
-
-        socketMedicas.on('diagnostico_actualizado', (res) => {
-            if (res.estado === 'OK') {
-                fFecha.textContent = new Date(res.datos.fecha_actualizacion).toLocaleString();
-                showToast('Diagnóstico actualizado correctamente en DB Local', 'success');
+            if (socketMedicas && socketMedicas.connected) {
+                socketMedicas.emit('actualizar_diagnostico', { id, diagnostico, rol: rolActual, usuario: usuarioActual });
             } else {
-                showToast(`Error al actualizar diagnóstico: ${res.mensaje}`, 'error');
+                showToast('Sin conexión con el servidor local', 'error');
             }
         });
 
+        // --- MANEJO DE EVENTOS WEBSOCKET: TERMINALES ADMINISTRATIVAS ---
+        function configurarSocketAdministrativas() {
+            socketAdministrativas.on('connect', () => {
+                const dot = document.getElementById('dot-administrativas');
+                dot.className = 'status-dot status-connected';
+                showToast('Conectado al Servidor de Terminales Administrativas (Nube)', 'info');
+            });
 
-        // --- MÓDULO TERMINALES ADMINISTRATIVAS ---
-        const formAdmision = document.getElementById('form-admision');
-        const feedContainer = document.getElementById('admisiones-feed');
+            socketAdministrativas.on('disconnect', () => {
+                const dot = document.getElementById('dot-administrativas');
+                dot.className = 'status-dot status-disconnected';
+                showToast('Desconectado de Terminales Administrativas', 'error');
+            });
+
+            socketAdministrativas.on('paciente_admitido_confirmado', (data) => {
+                showToast(`Paciente ${data.nombre} admitido correctamente`, 'success');
+                
+                const feed = document.getElementById('admisiones-feed');
+                const item = document.createElement('div');
+                item.className = 'feed-item';
+                
+                const timeStr = new Date(data.fecha_actualizacion).toLocaleTimeString();
+                
+                item.innerHTML = `
+                    <div class="feed-item-header">
+                        <span class="feed-item-name">👤 ${data.nombre}</span>
+                        <span class="feed-item-time">${timeStr}</span>
+                    </div>
+                    <div class="feed-item-details">
+                        <strong>RUT:</strong> ${data.rut} | <strong>Origen:</strong> <span class="badge-origen badge-${data.origen_registro}">${data.origen_registro}</span>
+                    </div>
+                    <div class="feed-item-details" style="margin-top: 0.1rem; font-style: italic;">
+                        "${data.diagnostico}"
+                    </div>
+                `;
+                feed.insertBefore(item, feed.firstChild);
+                
+                // Si nosotros hicimos el envío, limpiamos el formulario
+                if (document.getElementById('adm-rut').value.trim() === data.rut) {
+                    document.getElementById('form-admision').reset();
+                }
+            });
+
+            socketAdministrativas.on('error_admision', (data) => {
+                showToast(`Error de admisión: ${data.error}`, 'error');
+            });
+        }
 
         function admitirPaciente() {
             const rut = document.getElementById('adm-rut').value.trim();
             const nombre = document.getElementById('adm-nombre').value.trim();
             const diagnostico = document.getElementById('adm-diagnostico').value.trim();
-
-            socketAdministrativas.emit('admitir_paciente', { rut, nombre, diagnostico });
-        }
-
-        socketAdministrativas.on('paciente_admitido_confirmado', (data) => {
-            showToast(`Paciente ${data.nombre} admitido en la Nube`, 'success');
             
-            // Añadir al feed
-            const item = document.createElement('div');
-            item.className = 'feed-item';
-            
-            const timeStr = new Date(data.fecha_actualizacion).toLocaleTimeString();
-            
-            item.innerHTML = `
-                <div class="feed-item-header">
-                    <span class="feed-item-name">👤 ${data.nombre}</span>
-                    <span class="feed-item-time">${timeStr}</span>
-                </div>
-                <div class="feed-item-details">
-                    <strong>RUT:</strong> ${data.rut} | <strong>Origen:</strong> <span class="badge-origen badge-${data.origen_registro}">${data.origen_registro}</span>
-                </div>
-                <div class="feed-item-details" style="margin-top: 0.2rem; font-style: italic;">
-                    "${data.diagnostico}"
-                </div>
-            `;
-            
-            feedContainer.insertBefore(item, feedContainer.firstChild);
-            
-            // Limpiar formulario si fuimos nosotros
-            if (document.getElementById('adm-rut').value.trim() === data.rut) {
-                formAdmision.reset();
+            if (socketAdministrativas && socketAdministrativas.connected) {
+                socketAdministrativas.emit('admitir_paciente', { rut, nombre, diagnostico, rol: rolActual, usuario: usuarioActual });
+            } else {
+                showToast('Sin conexión con el servidor de la nube', 'error');
             }
-        });
-
-        socketAdministrativas.on('error_admision', (data) => {
-            showToast(`Error de admisión: ${data.error}`, 'error');
-        });
-
+        }
 
         // --- TOAST NOTIFICATIONS ---
         function showToast(message, type = 'info') {
@@ -692,9 +848,9 @@
             container.appendChild(toast);
 
             setTimeout(() => {
-                toast.style.animation = 'fadeOut 0.3s ease forwards';
-                setTimeout(() => toast.remove(), 300);
-            }, 3500);
+                toast.style.animation = 'fadeOut 0.2s ease forwards';
+                setTimeout(() => toast.remove(), 200);
+            }, 3000);
         }
     </script>
 </body>

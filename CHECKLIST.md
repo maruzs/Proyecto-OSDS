@@ -51,12 +51,12 @@
 ### Fase 5: Configuración de Gateway y Entrada (VM 3) - _Responsables: Integrante 4 e Integrante 3_
 
 - [ ] Clonar el repositorio en la **VM 3**.
-- [ ] Modificar el Frontend (`apps/frontend/index.html`):
-  - [ ] Agregar vista de login básico (simulando autenticación) para que el trabajador seleccione su Rol (Médico, Enfermero o Administrativo).
-  - [ ] Adjuntar el token o rol seleccionado en el payload de conexión inicial de Socket.io.
-- [ ] Modificar `nginx.conf` para cambiar las directivas `proxy_pass` usando las IPs privadas reales de las VMs:
-  - [ ] Redirigir `/ws-medicas` a `http://10.128.0.10:8001`.
-  - [ ] Redirigir `/ws-administrativas` a `http://10.128.0.20:8002`.
+- [x] Modificar el Frontend (`apps/frontend/index.html`):
+  - [x] Agregar vista de login básico (simulando autenticación) para que el trabajador seleccione su Rol (Médico, Enfermero o Administrativo).
+  - [x] Adjuntar el token o rol seleccionado en el payload de conexión inicial de Socket.io.
+- [x] Modificar `nginx.conf` para cambiar las directivas `proxy_pass` usando las IPs privadas reales de las VMs:
+  - [x] Redirigir `/ws-medicas` a `http://10.128.0.10:8001`.
+  - [x] Redirigir `/ws-administrativas` a `http://10.128.0.20:8002`.
 - [ ] Copiar los archivos del frontend estático (`apps/frontend/*`) al directorio raíz web de Nginx en VM 3.
 - [ ] Levantar el contenedor `nginx-proxy` en la VM 3.
 - [ ] Configurar medidas de rate-limiting y cabeceras de seguridad.
