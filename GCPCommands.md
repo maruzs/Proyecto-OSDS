@@ -1,40 +1,153 @@
 # Comandos GCP para el proyecto
 
-## Comandos Iniciales
+Este documento detalla los comandos necesarios para configurar la red, el firewall y crear las **3 Máquinas Virtuales (VMs)** con **Ubuntu Server 22.04 LTS** en Google Cloud Platform, respetando la arquitectura distribuida del proyecto.
+
+## 1. Configuración de Variables de Entorno
+
+Ejecuta esto en Cloud Shell para definir las variables iniciales:
 
 ```bash
-# Configuracion de variables de entorno
+# Definición de variables de entorno
 PROJECT_ID=$(gcloud config get-value project)
+REGION="us-central1"
 ZONE="us-central1-a"
-VM_NAME="salud-distribuida-vm"
+NETWORK_NAME="salud-vpc"
+SUBNET_NAME="salud-subnet"
+SUBNET_RANGE="10.128.0.0/24"
+```
 
-# Habilitar los servicios de GCP necesarios
-gcloud services enable compute.googleapis.com
+---
 
-# Regla de firewall para permitir acceso a los puertos 80 y 443
+## 2. Habilitar la API de Compute Engine
+
+```bash
+gcloud services enable compute.googleapis.com --project=$PROJECT_ID
+```
+
+---
+
+## 3. Configuración de Red VPC y Subredes
+
+Para poder asignar IPs internas específicas (`10.128.0.10`, `10.128.0.20`, `10.128.0.30`), crearemos una red VPC personalizada:
+
+```bash
+# Crear la Red VPC personalizada (sin subredes automáticas)
+gcloud compute networks create $NETWORK_NAME \
+    --project=$PROJECT_ID \
+    --subnet-mode=custom
+
+# Crear la subred para nuestras VMs
+gcloud compute networks subnets create $SUBNET_NAME \
+    --project=$PROJECT_ID \
+    --network=$NETWORK_NAME \
+    --region=$REGION \
+    --range=$SUBNET_RANGE
+```
+
+---
+
+## 4. Reglas de Firewall
+
+Necesitamos crear dos reglas de firewall: una para permitir la comunicación interna entre las VMs de la red, y otra para permitir el tráfico público (HTTP/HTTPS/SSH) a la VM del Gateway.
+
+```bash
+# 1. Permitir comunicación interna completa entre las VMs de la VPC (para replicación de BD y proxies)
+gcloud compute firewall-rules create allow-internal-salud \
+    --project=$PROJECT_ID \
+    --network=$NETWORK_NAME \
+    --allow tcp,udp,icmp \
+    --source-ranges=$SUBNET_RANGE \
+    --description="Permitir trafico interno entre todas las VMs de la red"
+
+# 2. Permitir tráfico HTTP (80) y HTTPS (443) entrante a internet (aplicable a la VM 3 / Gateway)
 gcloud compute firewall-rules create allow-http-https \
+    --project=$PROJECT_ID \
+    --network=$NETWORK_NAME \
     --allow tcp:80,tcp:443 \
     --target-tags=http-server,https-server \
-    --description="Permitir trafico HTTP y HTTPS entrante para el simulador"
+    --description="Permitir trafico HTTP y HTTPS desde el exterior"
 
-# Crear la VM (Con Docker y Docker Compose V2)
-gcloud compute instances create $VM_NAME \
+# 3. Permitir conexión SSH (22) desde cualquier lugar a las VMs
+gcloud compute firewall-rules create allow-ssh \
+    --project=$PROJECT_ID \
+    --network=$NETWORK_NAME \
+    --allow tcp:22 \
+    --description="Permitir acceso SSH"
+```
+
+---
+
+## 5. Creación de las 3 Máquinas Virtuales (Ubuntu 22.04 LTS + Docker + Compose V2)
+
+Ejecuta estos comandos para aprovisionar las 3 VMs con sus IPs estáticas respectivas. Todas vienen con un script de inicio (`startup-script`) para instalar Docker y Docker Compose V2 automáticamente.
+
+### VM 1: Hospital Local (`vm-hospital-local`)
+* **IP Interna:** `10.128.0.10`
+* **Servicios:** `app-estaciones` (puerto 8001), `db-local` (puerto 5432)
+
+```bash
+gcloud compute instances create vm-hospital-local \
     --project=$PROJECT_ID \
     --zone=$ZONE \
     --machine-type=e2-medium \
-    --image-family=debian-11 \
-    --image-project=debian-cloud \
+    --network=$NETWORK_NAME \
+    --subnet=$SUBNET_NAME \
+    --private-network-ip=10.128.0.10 \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud \
+    --metadata=startup-script="apt-get update && apt-get install -y docker.io git curl && curl -L https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/bin/docker-compose && chmod +x /usr/bin/docker-compose"
+```
+
+### VM 2: Nube Central (`vm-nube-central`)
+* **IP Interna:** `10.128.0.20`
+* **Servicios:** `app-terminales` (puerto 8002), `db-nube` (puerto 5432)
+
+```bash
+gcloud compute instances create vm-nube-central \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --machine-type=e2-medium \
+    --network=$NETWORK_NAME \
+    --subnet=$SUBNET_NAME \
+    --private-network-ip=10.128.0.20 \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud \
+    --metadata=startup-script="apt-get update && apt-get install -y docker.io git curl && curl -L https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/bin/docker-compose && chmod +x /usr/bin/docker-compose"
+```
+
+### VM 3: Gateway (`vm-gateway`)
+* **IP Interna:** `10.128.0.30`
+* **Servicios:** `nginx-proxy` (puerto 80/443), Frontend (`index.html`)
+
+```bash
+gcloud compute instances create vm-gateway \
+    --project=$PROJECT_ID \
+    --zone=$ZONE \
+    --machine-type=e2-medium \
+    --network=$NETWORK_NAME \
+    --subnet=$SUBNET_NAME \
+    --private-network-ip=10.128.0.30 \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud \
     --tags=http-server,https-server \
     --metadata=startup-script="apt-get update && apt-get install -y docker.io git curl && curl -L https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 -o /usr/bin/docker-compose && chmod +x /usr/bin/docker-compose"
+```
 
-# Conexion mediante SSH
-gcloud compute ssh salud-distribuida-vm --zone=us-central1-a
+---
 
+## 6. Conexión SSH
+
+Para entrar a cualquiera de las VMs, usa:
+
+```bash
+gcloud compute ssh vm-hospital-local --zone=us-central1-a
+gcloud compute ssh vm-nube-central --zone=us-central1-a
+gcloud compute ssh vm-gateway --zone=us-central1-a
 ```
 
 ## Solución al Error de Docker Compose (Si la VM ya está creada)
 
-Si ya tienes la VM corriendo y obtuviste el error de versión no soportada (debido a que apt instala Docker Compose V1 en Debian 11), ejecuta esto **dentro de la VM** por SSH para actualizar a la versión V2:
+Si ya tienes la VM corriendo y obtuviste el error de versión no soportada, ejecuta esto **dentro de la VM** por SSH para actualizar a la versión V2:
 
 ```bash
 # Descargar Docker Compose V2 e instalarlo sobreescribiendo el viejo
