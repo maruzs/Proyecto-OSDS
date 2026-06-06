@@ -66,11 +66,14 @@ git checkout mariano
 
 ## 4. Despliegue del Gateway
 
-Para levantar únicamente el Nginx y servir la página web en `vm-gateway` (sin cargar las bases de datos ni backends que corren en las otras VMs), se debe ejecutar dentro del directorio del proyecto en la VM:
+Para levantar únicamente el Nginx y servir la página web en `vm-gateway` (sin cargar las bases de datos ni backends que corren en las otras VMs), se debe ejecutar dentro del directorio VM3 en la VM:
 
 ```bash
-# Iniciar únicamente el servicio nginx-proxy
-sudo docker-compose up --build -d nginx-proxy
+# Acceder a la carpeta del componente VM3
+cd VM3
+
+# Iniciar el servicio nginx-proxy
+sudo docker-compose up --build -d
 ```
 
 Esto expone la aplicación web en el puerto `80` de la IP pública `104.154.143.133`.
