@@ -80,28 +80,36 @@ Esto expone la aplicación web en el puerto `80` de la IP pública `104.154.143.
 
 ---
 
-## 5. Configuración de HTTPS y SSL (SecOps)
+## 5. Configuración de HTTPS Seguro con Cloudflare Tunnel
 
-Para proteger la transmisión de datos y asegurar el cumplimiento de confidencialidad en el flujo clínico, se configuró Nginx para forzar el uso de HTTPS (puerto 443) y WebSockets seguros (WSS).
+Para evitar advertencias de seguridad en el navegador ("No seguro") y asegurar una encriptación TLS legitima de extremo a extremo sin exponer puertos publicos a internet, se integra Cloudflare Tunnel en la VM3. Esto permite acceder al sistema mediante el subdominio `osdsp3.epistia.cl`.
 
-### A. Generación de Certificado SSL Autofirmado en la VM
+### A. Ventajas de Seguridad (SecOps)
+- **Cero puertos expuestos:** Se pueden cerrar los puertos de entrada 80 y 443 en el Firewall de GCP, ya que el contenedor de Cloudflare crea una conexion segura saliente hacia los servidores de Cloudflare.
+- **SSL Legitimo:** El certificado SSL/TLS es gestionado y firmado directamente por Cloudflare, mostrando el candado verde de conexion segura en cualquier navegador.
+- **Proteccion DDoS:** Cloudflare actua como proxy y escudo perimetral para mitigar ataques dirigidos al portal web.
 
-Dentro de la VM3, se debe crear la carpeta `certs` y generar un par de claves SSL:
+### B. Pasos para la Configuración
 
-```bash
-# Crear directorio de certificados dentro de VM3
-mkdir -p certs
+1. **Crear el Tunel en Cloudflare:**
+   - Ve a tu consola de Cloudflare Zero Trust -> Access -> Tunnels.
+   - Crea un nuevo tunel llamado `salud-distribuida-gateway`.
+   - En la seccion de instalacion, copia el **Token del Tunel** (TUNNEL_TOKEN).
+   - Configura el subdominio `osdsp3.epistia.cl` apuntando a:
+     - **Service Type:** `http`
+     - **URL:** `nginx-proxy:80` (dentro de la red interna de Docker).
 
-# Generar clave privada y certificado autofirmado (válido por 365 días)
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout certs/nginx-selfsigned.key \
-  -out certs/nginx-selfsigned.crt \
-  -subj "/C=CL/ST=RM/L=Santiago/O=Clinica/CN=104.154.143.133"
-```
+2. **Configurar el Token en la VM3:**
+   - Crea un archivo `.env` dentro del directorio `VM3` en la maquina virtual:
+     ```bash
+     cd ~/Proyecto-OSDS/VM3
+     echo "TUNNEL_TOKEN=TU_TOKEN_DE_CLOUDFLARE_AQUI" > .env
+     ```
 
-### B. Pruebas de Conexión Segura
+3. **Iniciar el Servicio Completo:**
+   - Levanta el docker-compose de la VM3 (levantara Nginx y el cliente del tunel de forma automatica):
+     ```bash
+     sudo docker-compose up --build -d
+     ```
 
-Al acceder a `https://104.154.143.133`:
-- El navegador mostrará una advertencia de seguridad (debido al certificado autofirmado). Se debe proceder seleccionando "Avanzado" e "Ir a sitio no seguro".
-- El sitio cargará bajo protocolo seguro.
-- La biblioteca de Socket.io adaptará la conexión automáticamente para usar `wss://` (WebSockets sobre TLS).
+Al acceder a `https://osdsp3.epistia.cl`, la conexion sera segura, el trafico estara cifrado por HTTPS y los WebSockets negociaran de forma segura bajo `wss://` sin mostrar advertencias en el navegador.
