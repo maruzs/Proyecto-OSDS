@@ -27,19 +27,28 @@ pool.on('error', (err) => {
 io.on('connection', (socket) => {
     console.log(`[CONEXIÓN] Cliente conectado (nube). ID Socket: ${socket.id}`);
 
-    socket.on('admitir_paciente', async (data) => {
+   socket.on('admitir_paciente', async (data) => {
         console.log(`[ADMISIÓN] Solicitud recibida:`, data);
+        
+        //VALIDACIÓN DE CAMPOS OBLIGATORIOS
         if (!data || !data.rut || !data.nombre) {
             console.error('[ERROR] Datos insuficientes para admitir paciente:', data);
             return socket.emit('error_admision', { error: 'RUT y nombre requeridos' });
         }
 
+        //FILTRO SECOPS: CONTROL DE ACCESO BASADO EN ROLES (RBAC)
+        if (data.rol !== 'Administrativo') {
+            console.error(`[SECOPS_RECHAZO] Intento de admisión no autorizado por rol: ${data.rol || 'No definido'}`);
+            return socket.emit('error_admision', { error: 'Acceso denegado. Se requiere rol Administrativo.' });
+        }
+
+        //CONSTRUCCIÓN DE LA FICHA CON METADATOS DISTRIBUIDOS
         const nuevaFicha = {
             id: uuidv4(),
             rut: data.rut,
             nombre: data.nombre,
             diagnostico: data.diagnostico || 'Ingreso Administrativo / En espera de atencion',
-            origen_registro: 'nube'
+            origen_registro: 'nube' // Clave para la replicación lógica condicional
         };
 
         try {
@@ -52,6 +61,8 @@ io.on('connection', (socket) => {
             
             const res = await pool.query(queryText, values);
             console.log(`[OK] Paciente admitido y guardado en db-nube. ID: ${res.rows[0].id}`);
+            
+            // Difusión masiva a todas las terminales conectadas
             io.emit('paciente_admitido_confirmado', res.rows[0]);
         } catch (err) {
             console.error('[DB_ERROR] Error al insertar paciente en db-nube:', err);
