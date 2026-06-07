@@ -32,11 +32,11 @@ async function main() {
     
     await runCmd(`docker exec db-nube psql -U postgres -d clinica -c "DROP SUBSCRIPTION IF EXISTS sub_desde_local;"`);
     await runCmd(`docker exec db-nube psql -U postgres -d clinica -c "DROP PUBLICATION IF EXISTS pub_nube_a_local;"`);
-    await runCmd(`docker exec db-nube psql -U postgres -d clinica -c "CREATE PUBLICATION pub_nube_a_local FOR TABLE fichas_pacientes;"`);
+    await runCmd(`docker exec db-nube psql -U postgres -d clinica -c "CREATE PUBLICATION pub_nube_a_local FOR TABLE fichas_pacientes WHERE (origen_registro = 'nube');"`);
 
     await runCmd(`docker exec db-local psql -U postgres -d clinica -c "DROP SUBSCRIPTION IF EXISTS sub_desde_nube;"`);
     await runCmd(`docker exec db-local psql -U postgres -d clinica -c "DROP PUBLICATION IF EXISTS pub_local_a_nube;"`);
-    await runCmd(`docker exec db-local psql -U postgres -d clinica -c "CREATE PUBLICATION pub_local_a_nube FOR TABLE fichas_pacientes;"`);
+    await runCmd(`docker exec db-local psql -U postgres -d clinica -c "CREATE PUBLICATION pub_local_a_nube FOR TABLE fichas_pacientes WHERE (origen_registro = 'local');"`);
 
     await runCmd(
         `docker exec db-nube psql -U postgres -d clinica -c ` +
