@@ -280,7 +280,7 @@ El proyecto cuenta con un entorno de integración automatizada en local para ver
 Para ejecutar los tests de integración en tu máquina local:
 ```bash
 # Instalar dependencias necesarias
-npm install
+pnpm install
 
 # Levantar contenedores y comprobar la replicación bidireccional y proxy Nginx
 node scripts/setup-and-test.js
