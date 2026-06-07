@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  db-nube:
+    image: postgres:16-alpine
+    container_name: db-nube
+    restart: always
+    environment:
+      POSTGRES_DB: clinica
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass
+    volumes:
+      - db_cloud_data:/var/lib/postgresql/data
+      - ./init-nube.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"  # Expone la BD para que la VM-1 del hospital local pueda replicar
+    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+
+  app-terminales:
+    build: ../apps/terminales-administrativas
+    container_name: app-terminales
+    restart: always
+    ports:
+      - "8002:8002"
+    environment:
+      - DB_HOST=db-nube
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    depends_on:
+      - db-nube
+
+volumes:
+  db_cloud_data:
+    name: db_cloud_data
