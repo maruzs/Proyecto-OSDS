@@ -45,30 +45,29 @@ services:
     networks:
       - cloud_net
       - dmz_net # Permite la conexión directa hacia db-local para replicación
+    # -------------------------------------------------------------------------
+    # APLICACIÓN: ESTACIONES MÉDICAS (HOSPITAL LOCAL)
+    # -------------------------------------------------------------------------
+    #app-estaciones:
+    # build: ./estaciones-medicas
+    # container_name: app-estaciones
+    # restart: always
+    # ports:
+    #   - "8001:8001"
+    # environment:
+    #   - DB_HOST=db-local
+    #   - DB_PORT=5432
+    #   - DB_USER=postgres
+    #   - DB_PASSWORD=postgres_secure_pass
+    #   - DB_NAME=clinica
+    # networks:
+    #   - hospital_net
+    # depends_on:
+    #   - db-local
 
-  # -------------------------------------------------------------------------
-  # APLICACIÓN: ESTACIONES MÉDICAS (HOSPITAL LOCAL)
-  # -------------------------------------------------------------------------
-  app-estaciones:
-    build: ./estaciones-medicas
-    container_name: app-estaciones
-    restart: always
-    ports:
-      - "8001:8001"
-    environment:
-      - DB_HOST=db-local
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres_secure_pass
-      - DB_NAME=clinica
-    networks:
-      - hospital_net
-    depends_on:
-      - db-local
-
-  # -------------------------------------------------------------------------
-  # APLICACIÓN: TERMINALES ADMINISTRATIVAS (ENTORNO NUBE)
-  # -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # APLICACIÓN: TERMINALES ADMINISTRATIVAS (ENTORNO NUBE)
+    # -------------------------------------------------------------------------
   app-terminales:
     build: ./terminales-administrativas
     container_name: app-terminales
@@ -85,30 +84,29 @@ services:
       - cloud_net
     depends_on:
       - db-nube
-
   # -------------------------------------------------------------------------
   # PROXY PERIMETRAL Y SEGURIDAD (NGINX)
   # -------------------------------------------------------------------------
-  nginx-proxy:
-    image: nginx:alpine
-    container_name: nginx-proxy
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - app-estaciones
-      - app-terminales
-    networks:
-      - hospital_net
-      - cloud_net
-      - dmz_net
+  # nginx-proxy:
+  #   image: nginx:alpine
+  #   container_name: nginx-proxy
+  #   restart: always
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - app-estaciones
+  #     - app-terminales
+  #   networks:
+  #     - hospital_net
+  #     - cloud_net
+  #     - dmz_net
 
-# =========================================================================
-# REDES VIRTUALES INTERNAS AISLADAS (DRIVER BRIDGE)
-# =========================================================================
+  # =========================================================================
+  # REDES VIRTUALES INTERNAS AISLADAS (DRIVER BRIDGE)
+  # =========================================================================
 networks:
   hospital_net:
     driver: bridge
