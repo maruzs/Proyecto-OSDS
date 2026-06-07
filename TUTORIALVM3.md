@@ -3,6 +3,12 @@
 ```bash
 # Encender VMs (Ideal que enciendan solo la que van a usar para no gastar tanto)
 gcloud compute instances start vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
+# vm-gateway
+gcloud compute instances start vm-gateway --zone=us-central1-a
+# vm-hospital-local
+gcloud compute instances start vm-hospital-local --zone=us-central1-a
+# vm-nube-central
+gcloud compute instances start vm-nube-central --zone=us-central1-a
 
 # Ingresar mediante ssh (selecciona la que necesites administrar)
 gcloud compute ssh vm-hospital-local --zone=us-central1-a
