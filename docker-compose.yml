@@ -20,23 +20,22 @@ services:
     networks:
       - cloud_net
       - dmz_net
-
-  app-terminales:
-    build: ./apps/terminales-administrativas
-    container_name: app-terminales
-    restart: always
-    ports:
-      - "8002:8002"
-    environment:
-      - DB_HOST=db-nube
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres_secure_pass
-      - DB_NAME=clinica
-    networks:
-      - cloud_net
-    depends_on:
-      - db-nube
+  # app-terminales:
+  #   build: ./apps/terminales-administrativas
+  #   container_name: app-terminales
+  #   restart: always
+  #   ports:
+  #     - "8002:8002"
+  #   environment:
+  #     - DB_HOST=db-nube
+  #     - DB_PORT=5432
+  #     - DB_USER=postgres
+  #     - DB_PASSWORD=postgres_secure_pass
+  #     - DB_NAME=clinica
+  #   networks:
+  #     - cloud_net
+  #   depends_on:
+  #     - db-nube
 
 networks:
   cloud_net:
