@@ -52,7 +52,7 @@ Se implementaron dos eventos principales de comunicación bidireccional:
 
 - actualizar_diagnostico: recibe el identificador UUID del registro junto al nuevo diagnóstico, ejecutando una operación UPDATE directa sobre la tabla fichas_pacientes.
 
-**Manejo de caché de alta demanda:** La base de datos local (db-local) corre en un contenedor PostgreSQL15 dentro de la red hospital_net, aislada de la base de datos de la nube. Actúa como caché de alta demanda, almacenando las fichas clinicias activas de los pacientes en atención, permitiendo que las estaciones medicas operen con baja latencia sin depender de la disponibilidad de la conexión externa.
+**Manejo de caché de alta demanda:** La base de datos local (db-local) corre en un contenedor PostgreSQL 16 dentro de la red hospital_net, aislada de la base de datos de la nube. Actúa como caché de alta demanda, almacenando las fichas clinicias activas de los pacientes en atención, permitiendo que las estaciones medicas operen con baja latencia sin depender de la disponibilidad de la conexión externa.
 
 **Simulación del flujo clínico:** El flujo comienza cuando el módulo administrativo admite un paciente, generando un UUID y almacenando su ficha en la base de datos de la nube. Una vez replicado el registro hacia db-local, el medico puede consultar la ficha ingresando el RUT del paciente desde su estación. Con los datos en pantalla, el medico actualiza el diagnostico usando el UUID del registro, quedando el cambio persistido localmente. Para simular este flujo, se precargaron tres fichas de prueba en db-local al inicializar el contenedor, representando casos clínicos reales como controles crónicos, urgencias y altas médicas.
 
@@ -60,7 +60,7 @@ Se implementaron dos eventos principales de comunicación bidireccional:
 
 **Desarrollo de Backend de comunicación síncrona:** Se programa el servidor Node.js usando Socket.io sobre el protocolo WebSocket, configurando el puerto 8002 y el sub-path /ws-administrativas para el enrutamiento del proxy inverso.
 
-**Lógica de negocio e inyección de metadatos:** Se implementa el manejador de eventos admitir_pociente, el que gestiona la concurrencia, mitiga colisiones relacionales mediante la identificadores universales y añade el metadato critico origen_registro:'nube' para activar las reglas de replicación selectiva condicional de PostgreSQL 15.
+**Lógica de negocio e inyección de metadatos:** Se implementa el manejador de eventos admitir_pociente, el que gestiona la concurrencia, mitiga colisiones relacionales mediante la identificadores universales y añade el metadato critico origen_registro:'nube' para activar las reglas de replicación selectiva condicional de PostgreSQL 16.
 
 2.  Módulo Transversal de Infraestructura y Orquestación
 
@@ -80,7 +80,7 @@ Se implementaron dos eventos principales de comunicación bidireccional:
 
 2.  Mecanismo de replicación lógica
 
-(Explicación técnica de por qué se usa el nivel WAL lógico (wal_level=logical) en PostgreSQL 15 en lugar de replicación física.)
+(Explicación técnica de por qué se usa el nivel WAL lógico (wal_level=logical) en PostgreSQL 16 en lugar de replicación física.)
 
 3.  Mitigación de bucles infinitos de datos
 
