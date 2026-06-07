@@ -7,9 +7,14 @@ services:
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./frontend:/usr/share/nginx/html:ro
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./apps/frontend:/usr/share/nginx/html:ro
+    networks:
+      - hospital_net
+      - cloud_net
+      - dmz_net
 
   tunnel:
     image: cloudflare/cloudflared:latest
@@ -18,3 +23,16 @@ services:
     command: tunnel run
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    networks:
+      - dmz_net
+
+networks:
+  hospital_net:
+    driver: bridge
+    name: hospital_net
+  cloud_net:
+    driver: bridge
+    name: cloud_net
+  dmz_net:
+    driver: bridge
+    name: dmz_net
