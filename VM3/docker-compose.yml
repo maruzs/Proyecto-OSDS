@@ -8,8 +8,8 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./frontend:/usr/share/nginx/html:ro
+      - ../config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../apps/frontend:/usr/share/nginx/html:ro
 
   tunnel:
     image: cloudflare/cloudflared:latest
