@@ -35,7 +35,7 @@ El sistema se distribuirá en **3 Máquinas Virtuales (VMs)** creadas en el mism
 
 ---
 
-## 🔐 Gestión de Autenticación y Autorización (Auth & Permisos)
+## Gestión de Autenticación y Autorización (Auth & Permisos)
 
 Al ser un sistema distribuido que maneja datos médicos altamente sensibles (fichas clínicas), el control de acceso y los permisos se gestionarán en tres niveles para garantizar una seguridad robusta:
 

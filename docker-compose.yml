@@ -85,9 +85,6 @@ services:
       - hospital_net
       - cloud_net
       - dmz_net
-    depends_on:
-      - app-estaciones
-      - app-terminales
 
 
 networks:
