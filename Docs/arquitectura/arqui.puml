@@ -1,0 +1,156 @@
+@startuml Arquitectura de Resiliencia Absoluta: Centro de Salud Digital
+title Arquitectura de Resiliencia Absoluta: Centro de Salud Digital
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+
+skinparam package {
+    BorderColor #4A90E2
+}
+
+skinparam node {
+    BorderColor #2E8B57
+}
+
+skinparam database {
+    BorderColor #D2691E
+}
+
+'====================================================
+' INFRAESTRUCTURA LOCAL
+'====================================================
+
+package "INFRAESTRUCTURA LOCAL (En el Establecimiento)" as LOCAL {
+
+    package "Sistemas de Respaldo Energético" as ENERGIA {
+
+        node "Grupos Electrógenos\nDiésel Duales (ATS)" as ATS
+
+        node "UPS de Doble\nConversión (Online)" as UPS
+
+        note bottom of ATS
+        Autonomía mínima de 72 horas
+        con conmutación automatizada
+        end note
+
+        ATS --> UPS : Suministro por\nfalla de red
+    }
+
+    node "Terminales\nAdministrativas" as TERM
+    node "Tótems y Quioscos" as KIOSK
+    node "Estaciones Médicas\n(Fichas Clínicas)" as MED
+    node "Equipos de Laboratorio\n(Hardware Analizador)" as HWLAB
+
+    frame "Servidor Físico Core\nHipervisor Tipo 1 - Proxmox/ESXi" as CORE #EAF3FF {
+
+        node "VM 2: Seguridad y Acceso\n(Proxy Inverso / Nginx)" as VM2
+
+        node "VM 4: Clúster Edge\n(Alta Disponibilidad / K3s)" as VM4
+
+        node "VM 3: Ingesta de Laboratorio\n(Alto Cómputo - Sockets)" as VM3
+
+        node "VM 1: Enrutamiento y Red\n(SD-WAN Virtual Appliance)" as VM1
+
+        database "Caché DB Local\n(Réplica Edge Alta Demanda)" as CACHE
+
+        VM2 --> VM4
+        VM3 --> VM1
+        VM4 --> VM1
+
+        VM3 --> CACHE : Lectura / Escritura\nBaja Latencia
+    }
+
+    TERM --> VM2
+    KIOSK --> VM2
+
+    MED --> VM3
+    HWLAB --> VM3
+
+    UPS --> TERM
+    UPS --> KIOSK
+    UPS --> MED
+    UPS --> HWLAB
+}
+
+'====================================================
+' ENLACES WAN
+'====================================================
+
+node "Enlace 2: Satelital\n(Starlink)" as STARLINK
+
+node "Enlace 3: Radiofrecuencia / 5G" as RF5G
+
+node "Enlace 1: Fibra Dedicada" as FIBRA
+
+VM1 --> STARLINK
+VM1 --> RF5G
+VM1 --> FIBRA
+
+'====================================================
+' CONTROLADOR SD-WAN
+'====================================================
+
+node "Controlador Global SD-WAN" as SDWAN
+
+STARLINK --> SDWAN
+RF5G --> SDWAN
+FIBRA --> SDWAN
+
+'====================================================
+' NUBE MULTI REGIÓN
+'====================================================
+
+cloud "NUBE MULTI-REGIÓN (Activo-Activo)\nSEGURIDAD CON CONFIANZA CERO" as CLOUD {
+
+    package "Región A (Principal)" as RA {
+
+        node "Pasarela API A" as APIA
+
+        node "Clúster K8s A\n(Microservicios)" as K8SA
+
+        database "Almacén de Eventos\n(Base de Datos DB A)" as DBA
+
+        APIA --> K8SA
+        K8SA --> DBA
+    }
+
+    rectangle "Hub Global de Identidad\n(IAM y mTLS)" as IAM #FFF8DC
+
+    package "Región B (Espejo)" as RB {
+
+        node "Pasarela API B" as APIB
+
+        node "Clúster K8s B\n(Microservicios)" as K8SB
+
+        database "Almacén de Eventos\n(Base de Datos DB B)" as DBB
+
+        APIB --> K8SB
+        K8SB --> DBB
+    }
+
+    APIA --> IAM
+    IAM --> APIB
+
+    DBA <--> DBB : Sincronización\nMulti-Región Continua
+}
+
+'====================================================
+' BACKUP WORM
+'====================================================
+
+database "Almacenamiento en Frío WORM\n(Retención Inmutable 5 a 15 años)" as WORM #FFE6E6
+
+DBA --> WORM : Vuelco inmutable
+DBB --> WORM : Vuelco inmutable
+
+'====================================================
+' CONEXIÓN CLOUD
+'====================================================
+
+SDWAN --> APIA
+SDWAN --> APIB
+
+RF5G ..> APIA : Sincronización asíncrona\ncaché local (vía API)
+@enduml

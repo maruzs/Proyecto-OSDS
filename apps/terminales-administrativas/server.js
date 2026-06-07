@@ -7,34 +7,39 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 const server = http.createServer(app);
 
-// Configuración de Socket.io alineada con la ruta que espera Nginx
 const io = new Server(server, {
     path: '/ws-administrativas',
     cors: { origin: "*" }
 });
 
-// Configuración de la base de datos (Lee variables de entorno automáticas de pg)
 const pool = new Pool({
     host: process.env.DB_HOST || 'db-nube',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'centro_salud',
+    password: process.env.DB_PASSWORD || 'postgres_secure_pass',
+    database: process.env.DB_NAME || 'clinica',
     port: 5432,
 });
 
-io.on('connection', (socket) => {
-    console.log('⚡ Terminal Administrativa Conectada (ID Nube):', socket.id);
+pool.on('error', (err) => {
+    console.error('Error inesperado en el pool de base de datos (nube):', err);
+});
 
-    // Evento de Admisión: Cuando el Integrante 4 (Frontend) envíe un paciente
+io.on('connection', (socket) => {
+    console.log(`[CONEXIÓN] Cliente conectado (nube). ID Socket: ${socket.id}`);
+
     socket.on('admitir_paciente', async (data) => {
-        console.log('💼 Procesando admisión en la Nube:', data);
-        
+        console.log(`[ADMISIÓN] Solicitud recibida:`, data);
+        if (!data || !data.rut || !data.nombre) {
+            console.error('[ERROR] Datos insuficientes para admitir paciente:', data);
+            return socket.emit('error_admision', { error: 'RUT y nombre requeridos' });
+        }
+
         const nuevaFicha = {
             id: uuidv4(),
             rut: data.rut,
             nombre: data.nombre,
-            diagnostico: data.diagnostico || 'Ingreso Administrativo / En espera de atención',
-            origen_registro: 'nube' // CRUCIAL: Activa el filtro de PG15 para replicar a local
+            diagnostico: data.diagnostico || 'Ingreso Administrativo / En espera de atencion',
+            origen_registro: 'nube'
         };
 
         try {
@@ -46,23 +51,20 @@ io.on('connection', (socket) => {
             const values = [nuevaFicha.id, nuevaFicha.rut, nuevaFicha.nombre, nuevaFicha.diagnostico, nuevaFicha.origen_registro];
             
             const res = await pool.query(queryText, values);
-            console.log('💾 Registro histórico guardado en db-nube:', res.rows[0]);
-
-            // Emitir de vuelta a las terminales administrativas la confirmación
+            console.log(`[OK] Paciente admitido y guardado en db-nube. ID: ${res.rows[0].id}`);
             io.emit('paciente_admitido_confirmado', res.rows[0]);
-            
         } catch (err) {
-            console.error('❌ Error guardando admisión en db-nube:', err.message);
+            console.error('[DB_ERROR] Error al insertar paciente en db-nube:', err);
             socket.emit('error_admision', { error: err.message });
         }
     });
 
-    socket.on('disconnect', () => {
-        console.log('❌ Terminal Administrativa desconectada de la Nube');
+    socket.on('disconnect', (reason) => {
+        console.log(`[DESCONEXIÓN] Cliente desconectado (nube). ID Socket: ${socket.id}. Motivo: ${reason}`);
     });
 });
 
-const PORT = 8002; // Puerto asignado por el DevOps en nginx.conf
+const PORT = 8002;
 server.listen(PORT, () => {
-    console.log(`🚀 Servidor de Terminales Administrativas operativo en puerto ${PORT}`);
+    console.log(`[SISTEMA] Servidor de Terminales Administrativas operativo en puerto ${PORT}`);
 });
