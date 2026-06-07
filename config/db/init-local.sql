@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS fichas_pacientes (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;
+
 DROP PUBLICATION IF EXISTS pub_local_a_nube;
 CREATE PUBLICATION pub_local_a_nube FOR TABLE fichas_pacientes WHERE (origen_registro = 'local');
 
