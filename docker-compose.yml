@@ -12,6 +12,8 @@ services:
     volumes:
       - db_cloud_data:/var/lib/postgresql/data
       - ./config/db/init-nube.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
     command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
     extra_hosts:
       - "db-local:10.128.0.10"
