@@ -177,6 +177,16 @@ La siguiente tabla detalla qué componentes se comunican entre sí y las redes v
 \label{tab:conectividad}
 \end{table}
 
+\subsection{Diagrama de la arquitectura y topología general}
+El sistema se modeló siguiendo una arquitectura con alta disponibilidad y redundancia de datos. En la Figura~\ref{fig:diagrama_arquitectura} se describe la topología general implementada, la cual integra el hardware local del hospital (con alimentación de respaldo ATS/UPS y servidores hipervisores de VM1 a VM4), enlaces WAN redundantes (Fibra, Radiofrecuencia y Satelital Starlink bajo un controlador SD-WAN) y la nube multi-región activa-activa que aloja los servicios administrativos y de base de datos distribuidos.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Docs/arquitectura/arquitecturaV2.png}
+    \caption{Diagrama general de la topología física y lógica distribuida.}
+    \label{fig:diagrama_arquitectura}
+\end{figure}
+
 \section{Detalle de componentes y módulos de aplicación}
 
 \subsection{Módulo de Estaciones médicas}
