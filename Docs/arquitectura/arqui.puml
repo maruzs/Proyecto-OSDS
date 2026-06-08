@@ -6,64 +6,81 @@ skinparam packageStyle rectangle
 skinparam componentStyle rectangle
 skinparam defaultTextAlignment center
 
-' Colores
-skinparam node {
-    BorderColor #1E3A8A
-    BackgroundColor #EFF6FF
-}
-skinparam database {
-    BorderColor #0D9488
-    BackgroundColor #F0FDFA
-}
-skinparam cloud {
-    BorderColor #0284C7
-    BackgroundColor #F0F9FF
+skinparam package {
+    BorderColor #4A90E2
+    BackgroundColor #EAF3FF
 }
 
-cloud "Internet (Acceso Seguro TLS)" as INTERNET {
-    actor "Usuario / Personal Clinico" as CLIENT
+skinparam node {
+    BorderColor #2E8B57
+    BackgroundColor #F4FBF7
+}
+
+skinparam database {
+    BorderColor #D2691E
+    BackgroundColor #FFF8DC
+}
+
+'====================================================
+' CLIENTE / INTERNET
+'====================================================
+cloud "Capa Cliente e Internet\n(Tránsito Seguro TLS)" as INTERNET {
+    actor "Personal Clínico\n(Médicos, Administrativos)" as CLIENT
+    
     note bottom of CLIENT
-        Acceso mediante navegador
+        Acceso unificado vía web
         https://osdsp3.epistia.cl
     end note
 }
 
-node "VM 3: Gateway (vm-gateway)\nIP Publica: 104.154.143.133\nIP Privada: 10.128.0.30" as VMGATEWAY {
-    component "cloudflare-tunnel\n(Cliente Cloudflared)" as TUNNEL
-    component "nginx-proxy\n(Proxy Inverso / Ports: 80/443)" as NGINX
-    
-    TUNNEL -[#blue]-> NGINX : Enruta trafico interno\n(nginx-proxy:80)
+'====================================================
+' INFRAESTRUCTURA GCP (VPC)
+'====================================================
+package "Google Cloud Platform (VPC Network)" as GCP #EAF3FF {
+
+    ' VM 3: Gateway Perimetral
+    frame "VM 3: Gateway (vm-gateway)\nIP Pública: 104.154.143.133\nIP Privada: 10.128.0.30" as VM3 #FFFFFF {
+        node "nginx-proxy\n(Proxy Inverso)" as NGINX
+        node "cloudflare-tunnel\n(Cliente Cloudflared)" as TUNNEL
+        
+        TUNNEL --> NGINX : Enrutamiento interno\n(puerto 80)
+    }
+
+    ' VM 1: Hospital Local
+    frame "VM 1: Hospital Local (vm-hospital-local)\nIP Privada: 10.128.0.10" as VM1 #FFFFFF {
+        node "app-estaciones\n(WebSocket Backend)" as ESTACIONES
+        database "db-local (PostgreSQL 16)\n(Caché Clínica Local)" as DBLOCAL
+        
+        ESTACIONES --> DBLOCAL : Consultas SQL locales\n(Latencia cero)
+        
+        note bottom of DBLOCAL
+            Suscripción: sub_desde_nube
+            Publicación: pub_local_a_nube
+        end note
+    }
+
+    ' VM 2: Nube Central
+    frame "VM 2: Nube Central (vm-nube-central)\nIP Privada: 10.128.0.20" as VM2 #FFFFFF {
+        node "app-terminales\n(WebSocket Backend)" as TERMINALES
+        database "db-nube (PostgreSQL 16)\n(BD Core Central)" as DBNUBE
+        
+        TERMINALES --> DBNUBE : Inserción de admisiones\n(Persistencia core)
+        
+        note bottom of DBNUBE
+            Suscripción: sub_desde_local
+            Publicación: pub_nube_a_local
+        end note
+    }
 }
 
-CLIENT -[#red,bold]-> TUNNEL : Conexion HTTPS/WSS\n(gRPC tunel inverso)
+' Conexiones de entrada
+CLIENT --> TUNNEL : Conexión HTTPS / WSS\n(gRPC túnel inverso seguro)
 
-node "VM 1: Hospital Local (vm-hospital-local)\nIP Privada: 10.128.0.10" as VMHOSPITAL {
-    component "app-estaciones\n(WebSocket Server - Port 8001)" as ESTACIONES
-    database "db-local (PostgreSQL 16)\n(Cache Clinica Local - Port 5432)" as DBLOCAL
-    
-    ESTACIONES -[#green]-> DBLOCAL : Consultas SQL locales\n(Baja latencia)
-}
+' Enrutamientos de Nginx Proxy
+NGINX --> ESTACIONES : Balanceo /ws-medicas\n(Puerto 8001)
+NGINX --> TERMINALES : Balanceo /ws-administrativas\n(Puerto 8002)
 
-node "VM 2: Nube Central (vm-nube-central)\nIP Privada: 10.128.0.20" as VMNUBE {
-    component "app-terminales\n(WebSocket Server - Port 8002)" as TERMINALES
-    database "db-nube (PostgreSQL 16)\n(BD Core Central - Port 5432)" as DBNUBE
-    
-    TERMINALES -[#green]-> DBNUBE : Persistencia core\nde admisiones
-}
-
-' Flujos de Nginx
-NGINX -[#orange,dashed]-> ESTACIONES : Proxy /ws-medicas\n(Port 8001)
-NGINX -[#orange,dashed]-> TERMINALES : Proxy /ws-administrativas\n(Port 8002)
-
-' Canal de Replicacion Logica
-DBLOCAL <.[#purple,bold].> DBNUBE : Replicacion Logica Bidireccional\n(Port 5432 / VPC Interna GCP)\norigin = none / WHERE origen_registro
-note top of DBLOCAL
-  Suscripcion: sub_desde_nube
-  Publicacion: pub_local_a_nube
-end note
-note top of DBNUBE
-  Suscripcion: sub_desde_local
-  Publicacion: pub_nube_a_local
-end note
+' Canal de Replicación lógica
+DBLOCAL <--> DBNUBE : Replicación Lógica Bidireccional\n(Puerto 5432 / Canal Interno GCP VPC)\norigin = none / filtros WHERE origen_registro
 
 @enduml
