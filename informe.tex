@@ -180,22 +180,107 @@ La siguiente tabla detalla qué componentes se comunican entre sí y las redes v
 \section{Detalle de componentes y módulos de aplicación}
 
 \subsection{Módulo de Estaciones médicas}
-\begin{itemize}
-    \item \textbf{Desarrollo Backend WebSocket:} El servidor del módulo de Estaciones Medicas fue desarrollado en Node.js utilizando la librería Socket.io v4.7.5, levantando el servicio en el puerto 8001 bajo el sub-path \texttt{/ws-medicas/}. Esta configuración permite al proxy inverso Nginx identificar y enrutar correctamente el tráfico hacia este módulo de forma independiente al módulo administrativo.
-    \item \textbf{Eventos principales de comunicación bidireccional:}
-    \begin{itemize}
-        \item \texttt{consultar\_paciente}: recibe un RUT como parámetro, consulta la base de datos local y retorna la ficha clínica activa del paciente.
-        \item \texttt{actualizar\_diagnostico}: recibe el identificador UUID del registro junto al nuevo diagnóstico, ejecutando una operación UPDATE directa sobre la tabla \texttt{fichas\_pacientes}.
-    \end{itemize}
-    \item \textbf{Manejo de caché de alta demanda:} La base de datos local (\texttt{db-local}) corre en un contenedor PostgreSQL 16 dentro de la red \texttt{hospital\_net}, aislada de la base de datos de la nube. Actúa como caché de alta demanda, almacenando las fichas clínicas activas de los pacientes en atención, permitiendo que las estaciones médicas operen con baja latencia sin depender de la disponibilidad de la conexión externa.
-    \item \textbf{Simulación del flujo clínico:} El flujo comienza cuando el módulo administrativo admite un paciente, generando un UUID y almacenando su ficha en la base de datos de la nube. Una vez replicado el registro hacia \texttt{db-local}, el médico puede consultar la ficha ingresando el RUT del paciente desde su estación. Con los datos en pantalla, el médico actualiza el diagnóstico usando el UUID del registro, quedando el cambio persistido localmente. Para simular este flujo, se precargaron tres fichas de prueba en \texttt{db-local} al inicializar el contenedor, representando casos clínicos reales como controles crónicos, urgencias y altas médicas.
-\end{itemize}
+El servidor de las Estaciones Médicas se ejecuta en Node.js y expone un servidor Socket.io en el puerto 8001 bajo el sub-path \texttt{/ws-medicas/}. Este módulo se comunica directamente con \texttt{db-local} y está encargado de atender las consultas de fichas del personal clínico.
+
+\subsubsection{Implementación del Servidor WebSocket}
+El código en \texttt{server.js} gestiona las consultas clínicas mediante el pool de conexiones de la librería \texttt{pg}:
+
+\begin{lstlisting}[language=JavaScript, caption=Eventos de consulta y actualización clínica en Estaciones Médicas.]
+// Evento: Consultar ficha de paciente
+socket.on('consultar_paciente', async (data) => {
+    if (!data || !data.rut) {
+        return socket.emit('ficha_paciente', { estado: 'ERROR', mensaje: 'RUT requerido' });
+    }
+    try {
+        const res = await pool.query('SELECT * FROM fichas_pacientes WHERE rut = $1', [data.rut]);
+        if (res.rows.length > 0) {
+            socket.emit('ficha_paciente', { estado: 'OK', datos: res.rows[0] });
+        } else {
+            socket.emit('ficha_paciente', { estado: 'NO_ENCONTRADO', datos: null });
+        }
+    } catch (err) {
+        socket.emit('ficha_paciente', { estado: 'ERROR', mensaje: err.message });
+    }
+});
+
+// Evento: Registrar diagnostico
+socket.on('actualizar_diagnostico', async (data) => {
+    if (!data || !data.id || !data.diagnostico) {
+        return socket.emit('diagnostico_actualizado', { estado: 'ERROR', mensaje: 'ID y diagnostico requeridos' });
+    }
+    try {
+        const res = await pool.query(
+            `UPDATE fichas_pacientes 
+             SET diagnostico = $1, fecha_actualizacion = CURRENT_TIMESTAMP
+             WHERE id = $2 RETURNING *`,
+            [data.diagnostico, data.id]
+        );
+        if (res.rows.length > 0) {
+            socket.emit('diagnostico_actualizado', { estado: 'OK', datos: res.rows[0] });
+        } else {
+            socket.emit('diagnostico_actualizado', { estado: 'NO_ENCONTRADO', datos: null });
+        }
+    } catch (err) {
+        socket.emit('diagnostico_actualizado', { estado: 'ERROR', mensaje: err.message });
+    }
+});
+\end{lstlisting}
+
+\subsubsection{Manejo de caché de alta demanda}
+La base local \texttt{db-local} actúa como caché física. Para simular el comportamiento clínico local en caso de desconexión WAN, se inicializan tres fichas de prueba en el script de base de datos local:
+
+\begin{lstlisting}[language=SQL, caption=Precarga de datos en db-local (init-local.sql)]
+INSERT INTO fichas_pacientes (id, rut, nombre, diagnostico, origen_registro)
+VALUES 
+('f3b2c1a0-d4e5-4a6b-bc7d-8e9f0a1b2c3d', '12345678-9', 'Juan Perez', 'DIAGNOSTICO: Hipertension arterial cronica controlada. RECETA: Enalapril 10mg.', 'local'),
+('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d', '11111111-1', 'Maria Loyola', 'DIAGNOSTICO: Traumatismo menor en tobillo derecho. RECETA: Ibuprofeno 600mg.', 'local'),
+('9e8d7c6b-5a4f-3e2d-1c0b-9a8f7e6d5c4b', '22222222-2', 'Carlos Silva', 'DIAGNOSTICO: Bronquitis aguda en fase de resolucion. RECETA: Paracetamol 500mg.', 'local')
+ON CONFLICT (id) DO NOTHING;
+\end{lstlisting}
 
 \subsection{Módulo de Terminales Administrativas}
-\begin{itemize}
-    \item \textbf{Desarrollo de Backend de comunicación síncrona:} Se programa el servidor Node.js usando Socket.io sobre el protocolo WebSocket, configurando el puerto 8002 y el sub-path \texttt{/ws-administrativas} para el enrutamiento del proxy inverso.
-    \item \textbf{Lógica de negocio e inyección de metadatos:} Se implementa el manejador de eventos \texttt{admitir\_paciente}, el que gestiona la concurrencia, mitiga colisiones relacionales mediante identificadores universales y añade el metadato crítico \texttt{origen\_registro: 'nube'} para activar las reglas de replicación selectiva condicional de PostgreSQL 16.
-\end{itemize}
+El servidor de Terminales Administrativas opera en la nube (puerto 8002, sub-path \texttt{/ws-administrativas}) y procesa la admisión de pacientes agregando metadatos de sincronización distribuida.
+
+\subsubsection{Inyección de Metadatos y Validación de Roles (RBAC)}
+Para prevenir que usuarios clínicos modifiquen los flujos de admisión y asegurar el control de acceso en red, el backend valida el rol del emisor y genera identificadores universales (UUID) para evitar colisiones de llaves primarias en la réplica:
+
+\begin{lstlisting}[language=JavaScript, caption=Gestión de admisiones en terminales-administrativas/server.js]
+socket.on('admitir_paciente', async (data) => {
+    // Validacion de campos requeridos
+    if (!data || !data.rut || !data.nombre) {
+        return socket.emit('error_admision', { error: 'RUT y nombre requeridos' });
+    }
+
+    // Filtro SecOps: Control de Acceso basado en Roles (RBAC)
+    if (!data.rol || data.rol.toLowerCase() !== 'administrativo') {
+        console.error(`[RECHAZO] Acceso denegado por rol: ${data.rol}`);
+        return socket.emit('error_admision', { error: 'Acceso denegado. Se requiere rol Administrativo.' });
+    }
+
+    // Inyeccion de metadato de origen para la replicacion logica
+    const nuevaFicha = {
+        id: uuidv4(), // UUID universal unico
+        rut: data.rut,
+        nombre: data.nombre,
+        diagnostico: data.diagnostico || 'Ingreso Administrativo / En espera de atencion',
+        origen_registro: 'nube' // Etiqueta clave para evitar bucles
+    };
+
+    try {
+        const queryText = `
+            INSERT INTO fichas_pacientes (id, rut, nombre, diagnostico, origen_registro)
+            VALUES ($1, $2, $3, $4, $5) RETURNING *;
+        `;
+        const values = [nuevaFicha.id, nuevaFicha.rut, nuevaFicha.nombre, nuevaFicha.diagnostico, nuevaFicha.origen_registro];
+        const res = await pool.query(queryText, values);
+        
+        // Difusion masiva a todas las terminales conectadas
+        io.emit('paciente_admitido_confirmado', res.rows[0]);
+    } catch (err) {
+        socket.emit('error_admision', { error: err.message });
+    }
+});
+\end{lstlisting}
 
 \subsection{Módulo Transversal de Infraestructura y Orquestación}
 Para desplegar los servicios de forma controlada usamos archivos \texttt{docker-compose.yml} separados para cada nodo.
@@ -211,36 +296,54 @@ Para desplegar los servicios de forma controlada usamos archivos \texttt{docker-
 \end{itemize}
 
 \subsection{Módulo de Seguridad Perimetral y Capa Cliente}
-\begin{itemize}
-    \item \textbf{Nginx como Proxy Inverso:} Nginx actúa como puerta de enlace de red. Aplicamos \texttt{server\_tokens off} para ocultar su versión. Configuramos rate limiting usando \texttt{limit\_req\_zone} con una zona de almacenamiento en memoria de 10 MB para soportar una tasa base de 10 peticiones por segundo por IP, permitiendo ráfagas transitorias de hasta 15 peticiones sin retardo inicial (\texttt{burst=15 nodelay}) en las rutas de WebSocket.
-    \item \textbf{Negociación y timeouts de WebSockets:} Para que las conexiones de Socket.io se establezcan correctamente, configuramos Nginx para interceptar la negociación y actualizar el protocolo HTTP/1.1 a WebSocket:
-    \begin{verbatim}
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
-    \end{verbatim}
-    Ajustamos \texttt{proxy\_read\_timeout} y \texttt{proxy\_send\_timeout} a 24 horas (\texttt{86400s}) para evitar que Nginx corte la conexión de las estaciones médicas por falta de actividad durante el día.
-    \item \textbf{Aplicación de Simulación Frontend:} Diseñamos una interfaz web de una sola página (SPA) responsiva. La aplicación lee el rol seleccionado (Médico, Enfermero o Administrativo) y muestra únicamente el panel clínico o el panel administrativo que corresponde. La comunicación utiliza Socket.io con transporte forzado a WebSockets, gestiona reconexiones automáticas si el servidor se cae, e indica el estado del canal mediante un indicador circular que cambia de color dinámicamente.
-\end{itemize}
+Nginx actúa como puerta de enlace de red en la VM3. Aplicamos \texttt{server\_tokens off} para ocultar su versión. Configuramos rate limiting usando \texttt{limit\_req\_zone} con una zona de almacenamiento en memoria de 10 MB para soportar una tasa base de 10 peticiones por segundo por IP, permitiendo ráfagas transitorias de hasta 15 peticiones sin retardo inicial (\texttt{burst=15 nodelay}) en las rutas de WebSocket.
+
+\subsubsection{Negociación y timeouts de WebSockets}
+Para que las conexiones de Socket.io se establezcan correctamente, configuramos Nginx para interceptar la negociación y actualizar el protocolo HTTP/1.1 a WebSocket:
+\begin{verbatim}
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection $connection_upgrade;
+\end{verbatim}
+Ajustamos \texttt{proxy\_read\_timeout} y \texttt{proxy\_send\_timeout} a 24 horas (\texttt{86400s}) para evitar que Nginx corte la conexión de las estaciones médicas por falta de actividad durante el día.
+
+\subsubsection{Cifrado y Exposición Segura vía Cloudflare Tunnel}
+Para resolver el problema del cifrado SSL/TLS sin necesidad de exponer la IP pública del Gateway de GCP al exterior, implementamos Cloudflare Tunnel en la VM3. El contenedor \texttt{cloudflare-tunnel} actúa como cliente proxy que establece una conexión HTTPS saliente y segura hacia la red de Cloudflare Zero Trust:
+
+\begin{lstlisting}[language=bash, caption=Integración del túnel en la VM3 (directorio VM3/docker-compose.yml)]
+services:
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro
+    networks:
+      - dmz_net
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare-tunnel
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    networks:
+      - dmz_net
+\end{lstlisting}
+
+Esta integración permite cerrar por completo los puertos de entrada HTTP/HTTPS en el firewall de GCP para la VM3. El cliente del túnel mapea el dominio \texttt{osdsp3.epistia.cl} internamente a \texttt{nginx-proxy:80}. De este modo, los navegadores externos acceden a la aplicación cifrada bajo HTTPS y los WebSockets operan de forma nativa y cifrada bajo el protocolo seguro \texttt{wss://}.
+
+\subsubsection{Aplicación de Simulación Frontend}
+Diseñamos una interfaz web de una sola página (SPA) responsiva. La aplicación lee el rol seleccionado (Médico, Enfermero o Administrativo) y muestra únicamente el panel clínico o el panel administrativo que corresponde. La comunicación utiliza Socket.io con transporte forzado a WebSockets, gestiona reconexiones automáticas si el servidor se cae, e indica el estado del canal mediante un indicador circular que cambia de color dinámicamente.
 
 \section{Modelo de datos y estrategia de sincronización distribuida}
 
 \subsection{Esquema unificado de persistencia}
-Tanto en la base local como en la nube compartimos la misma estructura para la tabla \texttt{fichas\_pacientes}:
+La tabla única de transacciones clínicas es \texttt{fichas\_pacientes}, la cual posee un diseño optimizado para base de datos distribuidas con la estructura detallada en la sección 3.1.2.
 
-\begin{lstlisting}[language=SQL]
-CREATE TABLE IF NOT EXISTS fichas_pacientes (
-    id UUID PRIMARY KEY,
-    rut VARCHAR(20) NOT NULL,
-    nombre VARCHAR(100) NOT NULL,
-    diagnostico TEXT,
-    origen_registro VARCHAR(50) NOT NULL,
-    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;
-\end{lstlisting}
-
-Usamos llaves primarias de tipo UUID para que al ingresar pacientes de forma paralela en la nube y en el hospital local, no ocurran colisiones de identificadores numéricos tradicionales al replicar. Además, activamos la directiva \texttt{REPLICA IDENTITY FULL} para obligar a PostgreSQL a incluir el valor anterior de todas las columnas de la fila en su registro WAL. Esto es necesario para que el sistema de replicación identifique la fila exacta que debe modificar cuando ocurre un UPDATE.
+La declaración de \texttt{REPLICA IDENTITY FULL} le indica al motor de PostgreSQL que al escribir cambios DML en el WAL lógico debe incluir el valor previo de todas las columnas de la fila. Esto resulta crítico para la resolución de conflictos asíncronos y para que la base de datos remota pueda encontrar la fila exacta que debe actualizarse ante eventos de edición clínica.
 
 \subsection{Mecanismo de replicación lógica}
 Decidimos usar replicación lógica en lugar de física por una razón clave: la replicación física obligaría a que la base de datos local del hospital (\texttt{db-local}) estuviese en modo de solo lectura. Con la replicación lógica podemos tener un esquema activo-activo, donde ambos nodos leen y escriben datos de manera simultánea. 
@@ -248,7 +351,7 @@ Decidimos usar replicación lógica en lugar de física por una razón clave: la
 Además, este método asíncrono transmite únicamente los cambios a nivel de fila sobre la tabla \texttt{fichas\_pacientes}, optimizando el ancho de banda y garantizando la consistencia eventual sin importar si hay caídas temporales de la conexión WAN.
 
 \subsection{Mitigación de bucles infinitos de datos}
-El problema de replicar de forma bidireccional activa-activa es el bucle circular: los cambios recibidos por replicación se vuelven a enviar al nodo de origen. Para evitar este problema implementamos dos capas de seguridad:
+La replicación bidireccional sin mitigación genera bucles circulares infinitos (el cambio recibido en A se vuelve a enviar a B). Para evitar esto implementamos dos capas de seguridad:
 
 \begin{enumerate}
     \item \textbf{Filtros en Publicaciones:} Restringimos el flujo de datos usando la cláusula \texttt{WHERE} de las publicaciones sobre la columna \texttt{origen\_registro}:
