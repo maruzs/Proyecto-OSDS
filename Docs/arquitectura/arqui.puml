@@ -1,11 +1,13 @@
 @startuml Arquitectura OSDS: Centro de Salud Digital
 title Arquitectura General del Sistema Distribuido (3 VMs en GCP)
 
+' Ajustes de Diseño Visual (Moderno y Limpio)
 skinparam shadowing false
 skinparam packageStyle rectangle
 skinparam componentStyle rectangle
 skinparam defaultTextAlignment center
 
+' Definicion de Colores y Estilos
 skinparam package {
     BorderColor #4A90E2
     BackgroundColor #EAF3FF
@@ -14,73 +16,87 @@ skinparam package {
 skinparam node {
     BorderColor #2E8B57
     BackgroundColor #F4FBF7
+    FontName Arial
 }
 
 skinparam database {
     BorderColor #D2691E
     BackgroundColor #FFF8DC
+    FontName Arial
 }
 
-'====================================================
-' CLIENTE / INTERNET
-'====================================================
-cloud "Capa Cliente e Internet\n(Tránsito Seguro TLS)" as INTERNET {
-    actor "Personal Clínico\n(Médicos, Administrativos)" as CLIENT
-    
+skinparam note {
+    BorderColor #A0A0A0
+    BackgroundColor #FAFAFA
+    FontName Arial
+    FontSize 10
+}
+
+left to right direction
+
+' ==========================================
+' CAPA CLIENTE
+' ==========================================
+cloud "Internet (Acceso Seguro)" as CAPA_CLIENTE #F0F9FF {
+    actor "Personal Médico\ny Administrativo" as CLIENT #FFFFFF
     note bottom of CLIENT
-        Acceso unificado vía web
+        Acceso unificado vía HTTPS/WSS a:
         https://osdsp3.epistia.cl
     end note
 }
 
-'====================================================
-' INFRAESTRUCTURA GCP (VPC)
-'====================================================
+' ==========================================
+' INFRAESTRUCTURA DE GOOGLE CLOUD PLATFORM
+' ==========================================
 package "Google Cloud Platform (VPC Network)" as GCP #EAF3FF {
 
-    ' VM 3: Gateway Perimetral
-    frame "VM 3: Gateway (vm-gateway)\nIP Pública: 104.154.143.133\nIP Privada: 10.128.0.30" as VM3 #FFFFFF {
-        node "nginx-proxy\n(Proxy Inverso)" as NGINX
-        node "cloudflare-tunnel\n(Cliente Cloudflared)" as TUNNEL
+    ' VM 3: GATEWAY DE SEGURIDAD
+    frame "VM 3: Gateway (vm-gateway)\nIP: 10.128.0.30" as VM3 #FFFFFF {
+        node "nginx-proxy\n(Proxy Inverso)" as NGINX #F4FBF7
+        node "cloudflare-tunnel\n(Cliente Cloudflared)" as TUNNEL #F4FBF7
         
-        TUNNEL --> NGINX : Enrutamiento interno\n(puerto 80)
+        TUNNEL -[#blue,bold]-> NGINX : Enrutamiento interno
     }
 
-    ' VM 1: Hospital Local
-    frame "VM 1: Hospital Local (vm-hospital-local)\nIP Privada: 10.128.0.10" as VM1 #FFFFFF {
-        node "app-estaciones\n(WebSocket Backend)" as ESTACIONES
-        database "db-local (PostgreSQL 16)\n(Caché Clínica Local)" as DBLOCAL
-        
-        ESTACIONES --> DBLOCAL : Consultas SQL locales\n(Latencia cero)
-        
-        note bottom of DBLOCAL
-            Suscripción: sub_desde_nube
-            Publicación: pub_local_a_nube
-        end note
-    }
+    together {
+        ' VM 1: HOSPITAL LOCAL
+        frame "VM 1: Hospital Local (vm-hospital-local)\nIP: 10.128.0.10" as VM1 #FFFFFF {
+            node "app-estaciones\n(WebSocket Backend)" as ESTACIONES #F4FBF7
+            database "db-local (PostgreSQL 16)\n[Caché Clínica]" as DBLOCAL
+            
+            ESTACIONES -[#green,bold]-> DBLOCAL : Consultas SQL locales\n(Latencia cero)
+        }
 
-    ' VM 2: Nube Central
-    frame "VM 2: Nube Central (vm-nube-central)\nIP Privada: 10.128.0.20" as VM2 #FFFFFF {
-        node "app-terminales\n(WebSocket Backend)" as TERMINALES
-        database "db-nube (PostgreSQL 16)\n(BD Core Central)" as DBNUBE
-        
-        TERMINALES --> DBNUBE : Inserción de admisiones\n(Persistencia core)
-        
-        note bottom of DBNUBE
-            Suscripción: sub_desde_local
-            Publicación: pub_nube_a_local
-        end note
+        ' VM 2: NUBE CENTRAL
+        frame "VM 2: Nube Central (vm-nube-central)\nIP: 10.128.0.20" as VM2 #FFFFFF {
+            node "app-terminales\n(WebSocket Backend)" as TERMINALES #F4FBF7
+            database "db-nube (PostgreSQL 16)\n[BD Core Central]" as DBNUBE
+            
+            TERMINALES -[#green,bold]-> DBNUBE : Inserción de admisiones\n(Persistencia core)
+        }
     }
 }
 
-' Conexiones de entrada
-CLIENT --> TUNNEL : Conexión HTTPS / WSS\n(gRPC túnel inverso seguro)
+' ==========================================
+' FLUJOS DE RED Y CONECTIVIDAD
+' ==========================================
+CLIENT -[#red,bold]-> TUNNEL : 1. Petición externa HTTPS/WSS\n(gRPC túnel inverso)
 
-' Enrutamientos de Nginx Proxy
-NGINX --> ESTACIONES : Balanceo /ws-medicas\n(Puerto 8001)
-NGINX --> TERMINALES : Balanceo /ws-administrativas\n(Puerto 8002)
+' Nginx ruteando tráfico
+NGINX -[#orange,bold]-> ESTACIONES : 2a. Proxy a /ws-medicas\n(Puerto 8001)
+NGINX -[#orange,bold]-> TERMINALES : 2b. Proxy a /ws-administrativas\n(Puerto 8002)
 
-' Canal de Replicación lógica
-DBLOCAL <--> DBNUBE : Replicación Lógica Bidireccional\n(Puerto 5432 / Canal Interno GCP VPC)\norigin = none / filtros WHERE origen_registro
+' Replicación Lógica Bidireccional
+DBLOCAL <.[#purple,bold].> DBNUBE : 3. Replicación Lógica (Puerto 5432)\norigin = none / filtros WHERE origen_registro
+
+note top of DBLOCAL
+  * pub_local_a_nube (origen = 'local')
+  * sub_desde_nube
+end note
+
+note bottom of DBNUBE
+  * pub_nube_a_local (origen = 'nube')
+  * sub_desde_local
+end note
 
 @enduml
