@@ -1,156 +1,69 @@
-@startuml Arquitectura de Resiliencia Absoluta: Centro de Salud Digital
-title Arquitectura de Resiliencia Absoluta: Centro de Salud Digital
+@startuml Arquitectura OSDS: Centro de Salud Digital
+title Arquitectura General del Sistema Distribuido (3 VMs en GCP)
 
 skinparam shadowing false
 skinparam packageStyle rectangle
 skinparam componentStyle rectangle
 skinparam defaultTextAlignment center
 
-skinparam package {
-    BorderColor #4A90E2
-}
-
+' Colores
 skinparam node {
-    BorderColor #2E8B57
+    BorderColor #1E3A8A
+    BackgroundColor #EFF6FF
 }
-
 skinparam database {
-    BorderColor #D2691E
+    BorderColor #0D9488
+    BackgroundColor #F0FDFA
+}
+skinparam cloud {
+    BorderColor #0284C7
+    BackgroundColor #F0F9FF
 }
 
-'====================================================
-' INFRAESTRUCTURA LOCAL
-'====================================================
-
-package "INFRAESTRUCTURA LOCAL (En el Establecimiento)" as LOCAL {
-
-    package "Sistemas de Respaldo Energético" as ENERGIA {
-
-        node "Grupos Electrógenos\nDiésel Duales (ATS)" as ATS
-
-        node "UPS de Doble\nConversión (Online)" as UPS
-
-        note bottom of ATS
-        Autonomía mínima de 72 horas
-        con conmutación automatizada
-        end note
-
-        ATS --> UPS : Suministro por\nfalla de red
-    }
-
-    node "Terminales\nAdministrativas" as TERM
-    node "Tótems y Quioscos" as KIOSK
-    node "Estaciones Médicas\n(Fichas Clínicas)" as MED
-    node "Equipos de Laboratorio\n(Hardware Analizador)" as HWLAB
-
-    frame "Servidor Físico Core\nHipervisor Tipo 1 - Proxmox/ESXi" as CORE #EAF3FF {
-
-        node "VM 2: Seguridad y Acceso\n(Proxy Inverso / Nginx)" as VM2
-
-        node "VM 4: Clúster Edge\n(Alta Disponibilidad / K3s)" as VM4
-
-        node "VM 3: Ingesta de Laboratorio\n(Alto Cómputo - Sockets)" as VM3
-
-        node "VM 1: Enrutamiento y Red\n(SD-WAN Virtual Appliance)" as VM1
-
-        database "Caché DB Local\n(Réplica Edge Alta Demanda)" as CACHE
-
-        VM2 --> VM4
-        VM3 --> VM1
-        VM4 --> VM1
-
-        VM3 --> CACHE : Lectura / Escritura\nBaja Latencia
-    }
-
-    TERM --> VM2
-    KIOSK --> VM2
-
-    MED --> VM3
-    HWLAB --> VM3
-
-    UPS --> TERM
-    UPS --> KIOSK
-    UPS --> MED
-    UPS --> HWLAB
+cloud "Internet (Acceso Seguro TLS)" as INTERNET {
+    actor "Usuario / Personal Clinico" as CLIENT
+    note bottom of CLIENT
+        Acceso mediante navegador
+        https://osdsp3.epistia.cl
+    end note
 }
 
-'====================================================
-' ENLACES WAN
-'====================================================
-
-node "Enlace 2: Satelital\n(Starlink)" as STARLINK
-
-node "Enlace 3: Radiofrecuencia / 5G" as RF5G
-
-node "Enlace 1: Fibra Dedicada" as FIBRA
-
-VM1 --> STARLINK
-VM1 --> RF5G
-VM1 --> FIBRA
-
-'====================================================
-' CONTROLADOR SD-WAN
-'====================================================
-
-node "Controlador Global SD-WAN" as SDWAN
-
-STARLINK --> SDWAN
-RF5G --> SDWAN
-FIBRA --> SDWAN
-
-'====================================================
-' NUBE MULTI REGIÓN
-'====================================================
-
-cloud "NUBE MULTI-REGIÓN (Activo-Activo)\nSEGURIDAD CON CONFIANZA CERO" as CLOUD {
-
-    package "Región A (Principal)" as RA {
-
-        node "Pasarela API A" as APIA
-
-        node "Clúster K8s A\n(Microservicios)" as K8SA
-
-        database "Almacén de Eventos\n(Base de Datos DB A)" as DBA
-
-        APIA --> K8SA
-        K8SA --> DBA
-    }
-
-    rectangle "Hub Global de Identidad\n(IAM y mTLS)" as IAM #FFF8DC
-
-    package "Región B (Espejo)" as RB {
-
-        node "Pasarela API B" as APIB
-
-        node "Clúster K8s B\n(Microservicios)" as K8SB
-
-        database "Almacén de Eventos\n(Base de Datos DB B)" as DBB
-
-        APIB --> K8SB
-        K8SB --> DBB
-    }
-
-    APIA --> IAM
-    IAM --> APIB
-
-    DBA <--> DBB : Sincronización\nMulti-Región Continua
+node "VM 3: Gateway (vm-gateway)\nIP Publica: 104.154.143.133\nIP Privada: 10.128.0.30" as VMGATEWAY {
+    component "cloudflare-tunnel\n(Cliente Cloudflared)" as TUNNEL
+    component "nginx-proxy\n(Proxy Inverso / Ports: 80/443)" as NGINX
+    
+    TUNNEL -[#blue]-> NGINX : Enruta trafico interno\n(nginx-proxy:80)
 }
 
-'====================================================
-' BACKUP WORM
-'====================================================
+CLIENT -[#red,bold]-> TUNNEL : Conexion HTTPS/WSS\n(gRPC tunel inverso)
 
-database "Almacenamiento en Frío WORM\n(Retención Inmutable 5 a 15 años)" as WORM #FFE6E6
+node "VM 1: Hospital Local (vm-hospital-local)\nIP Privada: 10.128.0.10" as VMHOSPITAL {
+    component "app-estaciones\n(WebSocket Server - Port 8001)" as ESTACIONES
+    database "db-local (PostgreSQL 16)\n(Cache Clinica Local - Port 5432)" as DBLOCAL
+    
+    ESTACIONES -[#green]-> DBLOCAL : Consultas SQL locales\n(Baja latencia)
+}
 
-DBA --> WORM : Vuelco inmutable
-DBB --> WORM : Vuelco inmutable
+node "VM 2: Nube Central (vm-nube-central)\nIP Privada: 10.128.0.20" as VMNUBE {
+    component "app-terminales\n(WebSocket Server - Port 8002)" as TERMINALES
+    database "db-nube (PostgreSQL 16)\n(BD Core Central - Port 5432)" as DBNUBE
+    
+    TERMINALES -[#green]-> DBNUBE : Persistencia core\nde admisiones
+}
 
-'====================================================
-' CONEXIÓN CLOUD
-'====================================================
+' Flujos de Nginx
+NGINX -[#orange,dashed]-> ESTACIONES : Proxy /ws-medicas\n(Port 8001)
+NGINX -[#orange,dashed]-> TERMINALES : Proxy /ws-administrativas\n(Port 8002)
 
-SDWAN --> APIA
-SDWAN --> APIB
+' Canal de Replicacion Logica
+DBLOCAL <.[#purple,bold].> DBNUBE : Replicacion Logica Bidireccional\n(Port 5432 / VPC Interna GCP)\norigin = none / WHERE origen_registro
+note top of DBLOCAL
+  Suscripcion: sub_desde_nube
+  Publicacion: pub_local_a_nube
+end note
+note top of DBNUBE
+  Suscripcion: sub_desde_local
+  Publicacion: pub_nube_a_local
+end note
 
-RF5G ..> APIA : Sincronización asíncrona\ncaché local (vía API)
 @enduml
