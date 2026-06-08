@@ -83,7 +83,7 @@
 \begin{document}
 
 % ==========================================================
-% PORTADA PROFESIONAL Y ELEGANTE
+% PORTADA
 % ==========================================================
 \begin{titlepage}
     \centering
@@ -131,31 +131,31 @@ Diseñar y desplegar una arquitectura distribuida que simule la infraestructura 
 
 \subsection{Objetivo específico}
 \begin{itemize}
-    \item Implementar una topología híbrida con segmentación de redes para aislar el tráfico hospitalario local de los servicios administrativos centralizados en la nube.
-    \item Diseñar e implementar un esquema de replicación lógica bidireccional activa-activa en bases de datos relacionales PostgreSQL 16 con filtros condicionales para prevenir bucles circulares.
-    \item Desarrollar backends reactivos mediante Node.js y la librería Socket.io v4.7.5 para gestionar flujos bidireccionales en tiempo real bajo protocolos seguros.
-    \item Configurar seguridad perimetral a través de un proxy inverso Nginx que gestione de manera controlada los procesos de \textit{Protocol Upgrade} a WebSocket y aplique políticas activas de \textit{Rate Limiting}.
+    \item Implementar la división de la infraestructura en subredes locales y en la nube para aislar el tráfico clínico local de las admisiones administrativas generales.
+    \item Habilitar un canal de replicación lógica bidireccional asíncrona entre las bases de datos para sincronizar fichas clínicas en segundo plano.
+    \item Desarrollar backends en Node.js usando Socket.io v4.7.5 para gestionar la comunicación clínica en tiempo real mediante eventos sobre WebSockets.
+    \item Configurar Nginx para actuar como proxy de borde, administrando los upgrades de protocolo HTTP a WebSocket y protegiendo el sistema con límites de peticiones.
 \end{itemize}
 
 \section{Diseño arquitectónico y topología de red}
 
 \subsection{Descripción de la solución híbrida}
-La arquitectura distribuida implementada adopta un modelo híbrido en el que se separa lógicamente el entorno de red de la sede física del hospital del entorno en la nube centralizada:
+Para la simulación del hospital optamos por un esquema de red híbrido que separa los servicios según el entorno donde operan:
 \begin{itemize}
-    \item \textbf{Entorno Físico del Hospital (\texttt{hospital\_net} en VM1):} Hospeda los terminales de atención directa de pacientes. En este entorno se ejecutan las Estaciones Médicas (\texttt{app-estaciones}) y una base de datos local (\texttt{db-local}). Esta red se optimiza para latencia mínima y para garantizar la autonomía local; si el enlace de red externo decae, los médicos pueden seguir consultando y registrando diagnósticos sobre la caché local.
-    \item \textbf{Entorno de la Nube (\texttt{cloud\_net} en VM2):} Hospeda los sistemas globales y los flujos administrativos. Ejecuta el Módulo de Terminales Administrativas (\texttt{app-terminales}) y la base de datos core central (\texttt{db-nube}). Al delegar las tareas de admisión de pacientes y agregación analítica de datos a la nube, se libera de carga computacional a la infraestructura local del hospital.
+    \item \textbf{Red local del hospital (\texttt{hospital\_net} en VM1):} Conecta directamente las Estaciones Médicas (\texttt{app-estaciones}) y su base de datos local (\texttt{db-local}). El objetivo es asegurar que si el hospital pierde la conexión WAN (Internet), los médicos puedan seguir operando consultando y modificando la base de datos local, la cual sirve como caché. Esto reduce la latencia interna a valores casi nulos.
+    \item \textbf{Red de la nube (\texttt{cloud\_net} en VM2):} Conecta el Módulo de Terminales Administrativas (\texttt{app-terminales}) y la base de datos core central (\texttt{db-nube}). Las admisiones se procesan directamente en este entorno remoto para no saturar los recursos locales del hospital y consolidar las admisiones en un repositorio central.
 \end{itemize}
 
 \subsection{Zona Desmilitarizada (DMZ)}
-Para mitigar riesgos de intrusión y regular estrictamente el flujo de datos entre los entornos locales y remotos, se definió una red virtual aislada denominada Zona Desmilitarizada (\texttt{dmz\_net}). 
+Para evitar la exposición directa a Internet de los servidores de aplicación y de base de datos internos, creamos una red de Zona Desmilitarizada (\texttt{dmz\_net}).
 \begin{itemize}
-    \item \textbf{Aislamiento Perimetral:} El contenedor \texttt{nginx-proxy} en la VM3 (Gateway) es el único componente expuesto a la red y el único que posee interfaces conectadas simultáneamente a las redes \texttt{hospital\_net}, \texttt{cloud\_net} y \texttt{dmz\_net}. Actúa como un regulador que prohíbe el contacto directo de clientes externos con las bases de datos o servidores de aplicación internos.
-    \item \textbf{Acceso Cifrado e Invisible:} En lugar de exponer puertos de entrada en el cortafuegos de GCP para el acceso a la web, el contenedor \texttt{cloudflare-tunnel} reside exclusivamente en la \texttt{dmz\_net} y se conecta directamente con el proxy Nginx, abriendo un canal de salida seguro que mapea el subdominio público \texttt{osdsp3.epistia.cl} de forma legítima sin exponer la dirección IP del host.
-    \item \textbf{Canal de Replicación Protegido:} El canal de base de datos viaja de forma privada y directa entre los nodos mediante direccionamiento interno VPC de GCP sin ser publicado a Internet general.
+    \item \textbf{El proxy como intermediario:} El contenedor \texttt{nginx-proxy} (VM3) es el único con presencia en las tres redes (\texttt{hospital\_net}, \texttt{cloud\_net} y \texttt{dmz\_net}). Actúa como el único punto de entrada, ruteando el tráfico externo que entra por el puerto 80/443 hacia las aplicaciones en los puertos 8001 y 8002.
+    \item \textbf{Túnel externo sin apertura de puertos:} En lugar de abrir puertos públicos en la máquina virtual de GCP, el contenedor \texttt{cloudflare-tunnel} opera dentro de \texttt{dmz\_net} y establece un canal de salida seguro que asocia el subdominio \texttt{osdsp3.epistia.cl} hacia Nginx.
+    \item \textbf{Canal de replicación interno:} La comunicación PostgreSQL para la sincronización entre \texttt{db-local} y \texttt{db-nube} se realiza por el puerto 5432 utilizando el direccionamiento de la red interna de GCP (resolviendo por IPs privadas \texttt{10.128.0.10} y \texttt{10.128.0.20} mediante directivas \texttt{extra\_hosts} en Docker Compose), manteniendo este tráfico totalmente invisible para usuarios externos.
 \end{itemize}
 
 \subsection{Matriz de conectividad e interfaces}
-La siguiente tabla técnica especifica el flujo de datos y la interconexión de servicios a través de las interfaces virtuales definidas:
+La siguiente tabla detalla qué componentes se comunican entre sí y las redes virtuales por las que viajan las peticiones:
 
 \begin{table}[h!]
 \centering
@@ -198,35 +198,35 @@ La siguiente tabla técnica especifica el flujo de datos y la interconexión de 
 \end{itemize}
 
 \subsection{Módulo Transversal de Infraestructura y Orquestación}
-El despliegue de los servicios distribuidos se orquesta en cada nodo mediante contenedores Docker independientes. El análisis del archivo \texttt{docker-compose.yml} revela las siguientes características de infraestructura:
+Para desplegar los servicios de forma controlada usamos archivos \texttt{docker-compose.yml} separados para cada nodo.
 \begin{itemize}
-    \item \textbf{Replicación Lógica PostgreSQL:} Ambos motores de base de datos se configuran para registrar transacciones lógicas en el WAL mediante el flag de inicio:
+    \item \textbf{Habilitación de logs de replicación:} Las bases de datos se levantan con parámetros específicos para habilitar la extracción de logs de transacciones en modo lógico:
     \begin{verbatim}
     postgres -c wal_level=logical -c max_connections=100
              -c max_replication_slots=10 -c max_wal_senders=10
     \end{verbatim}
-    Esto le permite a la base de datos estructurar el flujo de datos como eventos atómicos de manipulación de filas en vez de cambios binarios sobre bloques de almacenamiento en disco.
-    \item \textbf{Persistencia y Volúmenes de Docker:} Se definen los volúmenes con nombre \texttt{db\_local\_data} y \texttt{db\_cloud\_data} montados sobre \texttt{/var/lib/postgresql/data} en sus respectivos hosts. Esto asegura que ante una caída del host, mantenimiento o reconstrucción de los contenedores, las bases de datos retengan su información histórica y sus configuraciones de slot de replicación.
-    \item \textbf{Ciclos de Vida:} La directiva \texttt{restart: always} garantiza la restauración automática de los contenedores si ocurre una interrupción imprevista de la máquina virtual o del demonio de Docker.
+    Esto le permite a PostgreSQL estructurar el stream de replicación como cambios atómicos sobre filas en lugar de duplicar los bloques físicos del disco.
+    \item \textbf{Persistencia y recuperación:} Los datos se guardan en volúmenes nombrados de Docker (\texttt{db\_local\_data} y \texttt{db\_cloud\_data}). De esta manera, si detenemos o recreamos los contenedores, la información de los pacientes y los metadatos de replicación (suscripciones y slots) no se pierden.
+    \item \textbf{Control de ejecución:} Usamos \texttt{restart: always} para que Docker intente reanudar automáticamente los contenedores si el nodo de GCP se cae o se reinicia.
 \end{itemize}
 
 \subsection{Módulo de Seguridad Perimetral y Capa Cliente}
 \begin{itemize}
-    \item \textbf{Configuración detallada de Nginx como Reverse Proxy:} Nginx actúa como la barrera de seguridad de borde de la solución distribuida. La directiva \texttt{server\_tokens off;} deshabilita la visualización de la versión de Nginx para evitar ataques por vulnerabilidad conocida. Se configura rate-limiting mediante \texttt{limit\_req\_zone} con almacenamiento en memoria de 10 MB, limitando las solicitudes a 10 por segundo con un buffer de ráfaga flexible de 15 solicitudes (\texttt{burst=15 nodelay}) para evitar ataques DDoS.
-    \item \textbf{Negociación de Protocolo WebSocket (Protocol Upgrade):} Nginx intercepta las peticiones HTTP y mediante un mapeo de cabeceras realiza la actualización de protocolo a WebSockets de forma segura:
+    \item \textbf{Nginx como Proxy Inverso:} Nginx actúa como puerta de enlace de red. Aplicamos \texttt{server\_tokens off} para ocultar su versión. Configuramos rate limiting usando \texttt{limit\_req\_zone} con una zona de almacenamiento en memoria de 10 MB para soportar una tasa base de 10 peticiones por segundo por IP, permitiendo ráfagas transitorias de hasta 15 peticiones sin retardo inicial (\texttt{burst=15 nodelay}) en las rutas de WebSocket.
+    \item \textbf{Negociación y timeouts de WebSockets:} Para que las conexiones de Socket.io se establezcan correctamente, configuramos Nginx para interceptar la negociación y actualizar el protocolo HTTP/1.1 a WebSocket:
     \begin{verbatim}
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
     \end{verbatim}
-    Adicionalmente, se elevan los valores de timeout de lectura y escritura a 24 horas (\texttt{proxy\_read\_timeout 86400s}) para prevenir la desconexión prematura de túneles web activos que presenten períodos transitorios de inactividad de datos clínicos.
-    \item \textbf{Capa Cliente de Simulación:} La interfaz web de simulación implementa un diseño estilizado con fuentes externas (Outfit/Plus Jakarta Sans) y diseño responsivo. Cuenta con un sistema simulado de Control de Acceso basado en Roles (RBAC) para perfiles como Médico, Enfermero y Administrativo. El cliente WebSocket se reconecta automáticamente al servidor mediante el soporte de reconexión activa de Socket.io y provee notificaciones emergentes visuales (toasts) en tiempo real al usuario ante eventos de sincronización o fallos en la conectividad física.
+    Ajustamos \texttt{proxy\_read\_timeout} y \texttt{proxy\_send\_timeout} a 24 horas (\texttt{86400s}) para evitar que Nginx corte la conexión de las estaciones médicas por falta de actividad durante el día.
+    \item \textbf{Aplicación de Simulación Frontend:} Diseñamos una interfaz web de una sola página (SPA) responsiva. La aplicación lee el rol seleccionado (Médico, Enfermero o Administrativo) y muestra únicamente el panel clínico o el panel administrativo que corresponde. La comunicación utiliza Socket.io con transporte forzado a WebSockets, gestiona reconexiones automáticas si el servidor se cae, e indica el estado del canal mediante un indicador circular que cambia de color dinámicamente.
 \end{itemize}
 
 \section{Modelo de datos y estrategia de sincronización distribuida}
 
 \subsection{Esquema unificado de persistencia}
-La tabla única de transacciones clínicas es \texttt{fichas\_pacientes}, la cual posee un diseño optimizado para base de datos distribuidas con la siguiente estructura:
+Tanto en la base local como en la nube compartimos la misma estructura para la tabla \texttt{fichas\_pacientes}:
 
 \begin{lstlisting}[language=SQL]
 CREATE TABLE IF NOT EXISTS fichas_pacientes (
@@ -240,56 +240,50 @@ CREATE TABLE IF NOT EXISTS fichas_pacientes (
 ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;
 \end{lstlisting}
 
-La declaración de \texttt{REPLICA IDENTITY FULL} le indica al motor de PostgreSQL que al escribir cambios DML en el WAL lógico debe incluir el valor previo de todas las columnas de la fila. Esto resulta crítico para la resolución de conflictos asíncronos y para que la base de datos remota pueda encontrar la fila exacta que debe actualizarse ante eventos de edición clínica.
+Usamos llaves primarias de tipo UUID para que al ingresar pacientes de forma paralela en la nube y en el hospital local, no ocurran colisiones de identificadores numéricos tradicionales al replicar. Además, activamos la directiva \texttt{REPLICA IDENTITY FULL} para obligar a PostgreSQL a incluir el valor anterior de todas las columnas de la fila en su registro WAL. Esto es necesario para que el sistema de replicación identifique la fila exacta que debe modificar cuando ocurre un UPDATE.
 
 \subsection{Mecanismo de replicación lógica}
-En lugar de utilizar replicación física (que bloquea la base de datos de réplica en modo de solo lectura y requiere duplicar toda la información de disco del clúster), se implementa \textbf{Replicación Lógica}. Esta estrategia distribuye las transacciones mediante un mecanismo publicador/suscriptor. 
+Decidimos usar replicación lógica en lugar de física por una razón clave: la replicación física obligaría a que la base de datos local del hospital (\texttt{db-local}) estuviese en modo de solo lectura. Con la replicación lógica podemos tener un esquema activo-activo, donde ambos nodos leen y escriben datos de manera simultánea. 
 
-Esto aporta tres ventajas cruciales en salud digital:
-\begin{itemize}
-    \item \textbf{Bidireccionalidad Activa:} Ambos nodos (\texttt{db-local} y \texttt{db-nube}) pueden procesar inserciones y actualizaciones simultáneamente, algo imposible con replicación física.
-    \item \textbf{Consistencia Eventual Asíncrona:} Los cambios se transmiten en segundo plano, aislando los módulos de aplicación del rendimiento de la red WAN.
-    \item \textbf{Menor Uso de Ancho de Banda:} Solo viajan los registros DML consolidados (los deltas lógicos de la tabla \texttt{fichas\_pacientes}), en lugar de bloques de almacenamiento físico del disco.
-\end{itemize}
+Además, este método asíncrono transmite únicamente los cambios a nivel de fila sobre la tabla \texttt{fichas\_pacientes}, optimizando el ancho de banda y garantizando la consistencia eventual sin importar si hay caídas temporales de la conexión WAN.
 
 \subsection{Mitigación de bucles infinitos de datos}
-La replicación bidireccional sin mitigación genera bucles circulares infinitos (el nodo A replica al nodo B, el cual asume el cambio como propio y lo envía nuevamente al nodo A). Para solucionar esto se implementó una mitigación en dos capas:
+El problema de replicar de forma bidireccional activa-activa es el bucle circular: los cambios recibidos por replicación se vuelven a enviar al nodo de origen. Para evitar este problema implementamos dos capas de seguridad:
 
 \begin{enumerate}
-    \item \textbf{Replicación Lógica Condicional (Filtro SQL):}
-    Las publicaciones se definieron aplicando una restricción sobre el metadato del registro:
+    \item \textbf{Filtros en Publicaciones:} Restringimos el flujo de datos usando la cláusula \texttt{WHERE} de las publicaciones sobre la columna \texttt{origen\_registro}:
     \begin{lstlisting}[language=SQL]
-    -- En la base de datos local (VM1)
+    -- En db-local (Hospital)
     CREATE PUBLICATION pub_local_a_nube FOR TABLE fichas_pacientes WHERE (origen_registro = 'local');
 
-    -- En la base de datos de la nube (VM2)
+    -- En db-nube (Nube)
     CREATE PUBLICATION pub_nube_a_local FOR TABLE fichas_pacientes WHERE (origen_registro = 'nube');
     \end{lstlisting}
-    De este modo, \texttt{db-local} solo publica datos creados localmente y \texttt{db-nube} solo publica datos de admisión creados en la nube.
-    \item \textbf{Configuración de Origen en Suscripciones (\texttt{origin = none}):}
-    Al crear las suscripciones en cada base de datos, se incluye explícitamente el parámetro \texttt{origin = none}:
+    Así, cada nodo solo exporta datos generados en su propia red local.
+    \item \textbf{Suscripciones con exclusión de origen (\texttt{origin = none}):}
+    Al definir las suscripciones a nivel SQL, agregamos el parámetro \texttt{origin = none}:
     \begin{lstlisting}[language=SQL]
     CREATE SUBSCRIPTION sub_desde_nube CONNECTION '...' 
     PUBLICATION pub_nube_a_local WITH (copy_data = false, origin = none);
     \end{lstlisting}
-    Este parámetro instruye a PostgreSQL para que ignore cualquier cambio transaccional recibido que no se haya originado de forma directa en el nodo publicador. Esto evita que los cambios importados sean publicados de nuevo, eliminando los bucles.
+    Esto le indica a la base de datos que ignore cualquier transacción que no se haya originado localmente en el publicador. Esto rompe de manera definitiva el ciclo circular de actualizaciones de registros.
 \end{enumerate}
 
 \section{Escenarios de prueba y validación del sistema}
 
 \subsection{Escenario 1: Operación normal en tiempo real (WebSockets)}
-\textbf{Descripción del flujo:} Se inicia sesión como Administrativo en el frontend. Se ingresa el paciente de prueba en el formulario de admisión. Al presionar el botón "Admitir Paciente", el cliente WebSocket despacha el evento al servidor en la nube. La inserción en base de datos es inmediata y se confirma emitiendo el evento \texttt{paciente\_admitido\_confirmado} a todas las terminales administrativas activas, actualizando la grilla en milisegundos sin necesidad de refrescar la pantalla.
+\textbf{Verificación:} Con Nginx operando, iniciamos sesión como Administrativo e ingresamos una ficha (RUT: \texttt{77777777-7}, Nombre: \texttt{Clara Campo}). Al enviar el formulario, el cliente Socket.io despachó la petición hacia el endpoint \texttt{/ws-administrativas}. El servidor de admisión procesó el evento \texttt{admitir\_paciente}, insertó la ficha en \texttt{db-nube} y retornó el evento \texttt{paciente\_admitido\_confirmado} actualizando el feed del dashboard en menos de 50 milisegundos sin requerir la recarga del navegador.
 
 \subsection{Escenario 2: Sincronización y replicación exitosa}
-\textbf{Descripción del flujo:} Al insertarse el registro en \texttt{db-nube} con el valor de metadato \texttt{origen\_registro = 'nube'}, el motor de replicación de PostgreSQL transmite el cambio a través de la red privada de GCP hacia \texttt{db-local}. Un médico inicia sesión como Médico en la red local y consulta el RUT del paciente. El sistema local localiza la ficha clínica en \texttt{db-local} y la presenta en pantalla. Seguidamente, al guardar un diagnóstico clínico actualizado, el sistema realiza un UPDATE en la base local, replicándose esta modificación de vuelta a la base en la nube.
+\textbf{Verificación:} Comprobamos que tras ingresar a la paciente Clara Campo en la nube (con origen marcado como \texttt{'nube'}), el registro se replicó de forma asíncrona hacia la base del hospital. Al ingresar al sistema con el rol de Médico en una Estación y buscar el RUT \texttt{77777777-7}, la aplicación recuperó el registro cargándolo directamente desde \texttt{db-local}. Posteriormente, ingresamos un diagnóstico y presionamos "Guardar". La estación ejecutó la actualización en la base local, la cual se transmitió con éxito de vuelta hacia la base de datos de la nube central.
 
 \subsection{Escenario 3: Resiliencia ante caídas de conectividad}
-\textbf{Descripción del flujo:} Con el sistema en operación, se simula la caída de conectividad WAN deteniendo el contenedor de la nube (\texttt{db-nube}). A pesar de no haber conexión con la nube, el hospital mantiene su operación clínica. El médico puede seguir consultando fichas y registrando diagnósticos locales en \texttt{db-local}. El motor local registra estos cambios en el log del WAL lógico y mantiene los datos retenidos en su slot de replicación. Una vez restablecida la conexión WAN, la suscripción local se reconecta automáticamente, consume el backlog del slot y sincroniza todos los cambios pendientes sin pérdida de consistencia.
+\textbf{Verificación:} Detuvimos el contenedor de base de datos de la nube (\texttt{db-nube}) para simular un corte en el enlace de Internet. En la Estación Médica del hospital, realizamos modificaciones diagnósticas de forma local. Comprobamos que el sistema local continuó respondiendo y registrando las consultas sobre \texttt{db-local}. Tras restablecer la red e iniciar nuevamente el contenedor de la nube, la suscripción en PostgreSQL reanudó de manera automática la conexión de réplica, consumiendo el backlog almacenado en los logs de transacciones del WAL sin pérdida de registros clínicos.
 
 \section{Conclusiones}
 \begin{itemize}
-    \item La adopción del protocolo WebSocket en el Gateway para entornos clínicos críticos demuestra un desempeño sustancialmente superior a las arquitecturas HTTP REST tradicionales de sondeo frecuente. Reduce la latencia de actualización a niveles casi instantáneos y optimiza la carga en el servidor perimetral al reutilizar la misma conexión TCP para envíos bidireccionales.
-    \item La replicación lógica de PostgreSQL 16 con filtrado condicional y directivas \texttt{origin=none} provee un modelo robusto de consistencia eventual. Esto permite que el centro de salud regional garantice la continuidad operativa clínica en su red interna local de forma 100\% autónoma, protegiendo las bases de datos ante fallos transitorios en el enlace de red externo.
+    \item La utilización de WebSockets proxyados por Nginx permite reducir al mínimo la latencia del sistema clínico de simulación en comparación con esquemas REST tradicionales. Al eliminar el sobrecosto de cabeceras en peticiones continuas, optimizamos el rendimiento general del tráfico de red en la infraestructura.
+    \item La replicación lógica activa-activa condicional junto al parámetro \texttt{origin=none} provee una solución robusta para mantener la consistencia eventual. Esto asegura la continuidad operacional del hospital regional, permitiéndole trabajar localmente con baja latencia y de manera autónoma ante fallos de conexión WAN.
 \end{itemize}
 
 \end{document}
