@@ -1,8 +1,8 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
-\usepackage[spanish]{babel}
+\usepackage[spanish,es-tabla]{babel}
 \usepackage{geometry}
-\geometry{top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm}
+\geometry{top=3cm, bottom=3cm, left=2.5cm, right=2.5cm}
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{amssymb}
@@ -13,54 +13,111 @@
 \usepackage{xcolor}
 \usepackage{hyperref}
 \usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{microtype}
+\usepackage{lmodern}
 
+% Definición de Colores Formales
+\definecolor{navy}{RGB}{26, 54, 93}
+\definecolor{darkgray}{RGB}{60, 60, 60}
+\definecolor{codebg}{RGB}{245, 247, 250}
+\definecolor{codeborder}{RGB}{220, 225, 230}
+\definecolor{citegreen}{RGB}{40, 120, 40}
+
+% Configuración de Hipervínculos
 \hypersetup{
     colorlinks=true,
-    linkcolor=blue,
+    linkcolor=navy,
     filecolor=magenta,      
-    urlcolor=cyan,
-    pdftitle={Proyecto Sistemas Operativos y Distribuidos - Informe},
+    urlcolor=navy,
+    citecolor=citegreen,
+    pdftitle={Proyecto Sistemas Operativos y Distribuidos},
     pdfpagemode=FullScreen,
 }
 
-% Configuración para bloques de código
+% Configuración de Cabecera y Pie de Página (Fancyhdr)
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\lhead{\textcolor{navy}{\small\sffamily Proyecto Sistemas Operativos y Distribuidos}}
+\rhead{\textcolor{darkgray}{\small\sffamily Salud Digital}}
+\lfoot{\textcolor{darkgray}{\scriptsize\sffamily Integrantes: Hernandez, Muñoz, Martines, Paredes}}
+\rfoot{\textcolor{navy}{\small\sffamily Página \thepage}}
+
+% Personalización de Títulos de Sección con Titlesec
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{navy}}
+  {\thesection}{1em}{}[{\color{navy}\titlerule[0.8pt]}]
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{navy!85}}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{darkgray}}
+  {\thesubsubsection}{1em}{}
+
+% Configuración Mejorada para Bloques de Código (Listings)
 \lstset{
-    backgroundcolor=\color{gray!10},
-    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\small\color{darkgray},
     breakatwhitespace=false,
     breaklines=true,
     captionpos=b,
-    commentstyle=\color{green!50!black},
+    commentstyle=\color{gray},
     keepspaces=true,
-    keywordstyle=\color{blue},
+    keywordstyle=\color{navy}\bfseries,
     language=SQL,
     numbers=left,
-    numberstyle=\tiny\color{gray},
-    numbersep=5pt,
+    numberstyle=\tiny\color{gray!80},
+    numbersep=8pt,
     showspaces=false,
     showstringspaces=false,
     showtabs=false,
     tabsize=2,
-    stringstyle=\color{purple}
+    stringstyle=\color{purple},
+    frame=single,
+    rulecolor=\color{codeborder},
+    frameround=tttt
 }
-
-\pagestyle{fancy}
-\fancyhf{}
-\rhead{Proyecto Sistemas Operativos y Distribuidos}
-\lfoot{Integrantes: Hernandez, Muñoz, Martines, Paredes}
-\rfoot{Página \thepage}
-
-\title{Infraestructura y simulación de mensajería en tiempo real para entornos de salud digital\\
-\large Proyecto Sistemas Operativos y Distribuidos}
-\author{Krisstal Hernandez \and Mariano Muñoz \and Felipe Martines \and Maximiliano Paredes}
-\date{9 de junio de 2026}
 
 \begin{document}
 
-\maketitle
+% ==========================================================
+% PORTADA PROFESIONAL Y ELEGANTE
+% ==========================================================
+\begin{titlepage}
+    \centering
+    \vspace*{1.5cm}
+    {\scshape\Large Proyecto Sistemas Operativos y Distribuidos \par}
+    \vspace{1.5cm}
+    {\huge\bfseries\color{navy} Infraestructura y simulación de mensajería en tiempo real para entornos de salud digital \par}
+    \vspace{0.8cm}
+    {\large\textcolor{darkgray}{Simulación híbrida de Estaciones Médicas y Terminales Administrativas mediante WebSockets y Replicación Lógica PostgreSQL} \par}
+    \vspace{2.5cm}
+    
+    \begin{tabular}{p{4cm}l}
+        \textbf{Integrantes:} & Krisstal Hernandez \\
+                              & Mariano Muñoz \\
+                              & Felipe Martines \\
+                              & Maximiliano Paredes \\[0.3cm]
+        \textbf{Fecha:}       & 9 de junio de 2026
+    \end{tabular}
+    
+    \vfill
+    \begin{center}
+        \small\sffamily\color{darkgray}
+        Facultad de Ingeniería y Ciencias Aplicadas \\
+        Sistemas Operativos y Distribuidos
+    \end{center}
+\end{titlepage}
+
 \newpage
 \tableofcontents
 \newpage
+
+% ==========================================================
+% CONTENIDO DEL INFORME
+% ==========================================================
 
 \section{Introducción}
 
@@ -75,12 +132,10 @@ Diseñar y desplegar una arquitectura distribuida que simule la infraestructura 
 \subsection{Objetivo específico}
 \begin{itemize}
     \item Implementar una topología híbrida con segmentación de redes para aislar el tráfico hospitalario local de los servicios administrativos centralizados en la nube.
-    \item Implementar un mecanismo de replicación lógica bidireccional asíncrona sobre bases de datos relacionales PostgreSQL 16 con filtros condicionales para evitar colisiones y propagación circular.
-    \item Desarrollar e integrar microservicios basados en Node.js que utilicen la tecnología Socket.io v4.7.5 para la transmisión de eventos clínicos bidireccionales en tiempo real.
-    \item Configurar seguridad perimetral mediante un proxy inverso Nginx que gestione de manera segura la negociación de protocolos (WebSockets Upgrade), aplique políticas de limitación de tasa (Rate Limiting) y oculte la firma de los componentes internos.
+    \item Diseñar e implementar un esquema de replicación lógica bidireccional activa-activa en bases de datos relacionales PostgreSQL 16 con filtros condicionales para prevenir bucles circulares.
+    \item Desarrollar backends reactivos mediante Node.js y la librería Socket.io v4.7.5 para gestionar flujos bidireccionales en tiempo real bajo protocolos seguros.
+    \item Configurar seguridad perimetral a través de un proxy inverso Nginx que gestione de manera controlada los procesos de \textit{Protocol Upgrade} a WebSocket y aplique políticas activas de \textit{Rate Limiting}.
 \end{itemize}
-
----
 
 \section{Diseño arquitectónico y topología de red}
 
@@ -122,13 +177,11 @@ La siguiente tabla técnica especifica el flujo de datos y la interconexión de 
 \label{tab:conectividad}
 \end{table}
 
----
-
 \section{Detalle de componentes y módulos de aplicación}
 
 \subsection{Módulo de Estaciones médicas}
 \begin{itemize}
-    \item \textbf{Desarrollo Backend WebSocket:} El servidor del módulo de Estaciones Médicas fue desarrollado en Node.js utilizando la librería Socket.io v4.7.5, levantando el servicio en el puerto 8001 bajo el sub-path \texttt{/ws-medicas/}. Esta configuración permite al proxy inverso Nginx identificar y enrutar correctamente el tráfico hacia este módulo de forma independiente al módulo administrativo.
+    \item \textbf{Desarrollo Backend WebSocket:} El servidor del módulo de Estaciones Medicas fue desarrollado en Node.js utilizando la librería Socket.io v4.7.5, levantando el servicio en el puerto 8001 bajo el sub-path \texttt{/ws-medicas/}. Esta configuración permite al proxy inverso Nginx identificar y enrutar correctamente el tráfico hacia este módulo de forma independiente al módulo administrativo.
     \item \textbf{Eventos principales de comunicación bidireccional:}
     \begin{itemize}
         \item \texttt{consultar\_paciente}: recibe un RUT como parámetro, consulta la base de datos local y retorna la ficha clínica activa del paciente.
@@ -170,9 +223,6 @@ El despliegue de los servicios distribuidos se orquesta en cada nodo mediante co
     \item \textbf{Capa Cliente de Simulación:} La interfaz web de simulación implementa un diseño estilizado con fuentes externas (Outfit/Plus Jakarta Sans) y diseño responsivo. Cuenta con un sistema simulado de Control de Acceso basado en Roles (RBAC) para perfiles como Médico, Enfermero y Administrativo. El cliente WebSocket se reconecta automáticamente al servidor mediante el soporte de reconexión activa de Socket.io y provee notificaciones emergentes visuales (toasts) en tiempo real al usuario ante eventos de sincronización o fallos en la conectividad física.
 \end{itemize}
 
----
-
-\newpage
 \section{Modelo de datos y estrategia de sincronización distribuida}
 
 \subsection{Esquema unificado de persistencia}
@@ -193,7 +243,7 @@ ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;
 La declaración de \texttt{REPLICA IDENTITY FULL} le indica al motor de PostgreSQL que al escribir cambios DML en el WAL lógico debe incluir el valor previo de todas las columnas de la fila. Esto resulta crítico para la resolución de conflictos asíncronos y para que la base de datos remota pueda encontrar la fila exacta que debe actualizarse ante eventos de edición clínica.
 
 \subsection{Mecanismo de replicación lógica}
-En lugar de utilizar replicación física (que bloquea la base de datos de réplica en modo de solo lectura y requiere duplicar toda la información de disco del clúster), se implementa **Replicación Lógica**. Esta estrategia distribuye las transacciones mediante un mecanismo publicador/suscriptor. 
+En lugar de utilizar replicación física (que bloquea la base de datos de réplica en modo de solo lectura y requiere duplicar toda la información de disco del clúster), se implementa \textbf{Replicación Lógica}. Esta estrategia distribuye las transacciones mediante un mecanismo publicador/suscriptor. 
 
 Esto aporta tres ventajas cruciales en salud digital:
 \begin{itemize}
@@ -225,20 +275,16 @@ La replicación bidireccional sin mitigación genera bucles circulares infinitos
     Este parámetro instruye a PostgreSQL para que ignore cualquier cambio transaccional recibido que no se haya originado de forma directa en el nodo publicador. Esto evita que los cambios importados sean publicados de nuevo, eliminando los bucles.
 \end{enumerate}
 
----
-
 \section{Escenarios de prueba y validación del sistema}
 
 \subsection{Escenario 1: Operación normal en tiempo real (WebSockets)}
 \textbf{Descripción del flujo:} Se inicia sesión como Administrativo en el frontend. Se ingresa el paciente de prueba en el formulario de admisión. Al presionar el botón "Admitir Paciente", el cliente WebSocket despacha el evento al servidor en la nube. La inserción en base de datos es inmediata y se confirma emitiendo el evento \texttt{paciente\_admitido\_confirmado} a todas las terminales administrativas activas, actualizando la grilla en milisegundos sin necesidad de refrescar la pantalla.
 
 \subsection{Escenario 2: Sincronización y replicación exitosa}
-\textbf{Descripción del flujo:} Al insertarse el registro en \texttt{db-nube} con el valor de metadato \texttt{origen\_registro = 'nube'}, el motor de replicación procesa el WAL y envía la fila a la base de datos local. Al ingresar como Médico en una Estación Clínica de la red local y consultar el RUT ingresado, el sistema local encuentra el registro directamente en \texttt{db-local} y carga la ficha en pantalla. Seguidamente, al registrar un diagnóstico médico, la Estación realiza un UPDATE local en la tabla y esta actualización de diagnóstico clínico se replica en reversa de forma transparente hacia la base de datos core en la nube.
+\textbf{Descripción del flujo:} Al insertarse el registro en \texttt{db-nube} con el valor de metadato \texttt{origen\_registro = 'nube'}, el motor de replicación de PostgreSQL transmite el cambio a través de la red privada de GCP hacia \texttt{db-local}. Un médico inicia sesión como Médico en la red local y consulta el RUT del paciente. El sistema local localiza la ficha clínica en \texttt{db-local} y la presenta en pantalla. Seguidamente, al guardar un diagnóstico clínico actualizado, el sistema realiza un UPDATE en la base local, replicándose esta modificación de vuelta a la base en la nube.
 
 \subsection{Escenario 3: Resiliencia ante caídas de conectividad}
-\textbf{Descripción del flujo:} Con el sistema en operación, se simula la caída de conectividad WAN deteniendo el contenedor de la nube (\texttt{db-nube}). A pesar de no haber conexión con la nube, el hospital mantiene su operación normal. El médico puede seguir consultando fichas y registrando diagnósticos locales en \texttt{db-local}. El motor local registra estos cambios en el log del WAL lógico y mantiene los datos retenidos en su slot de replicación. Una vez restablecida la conexión WAN, la suscripción local se reconecta automáticamente, consume el backlog del slot y sincroniza todos los cambios pendientes sin pérdida de consistencia.
-
----
+\textbf{Descripción del flujo:} Con el sistema en operación, se simula la caída de conectividad WAN deteniendo el contenedor de la nube (\texttt{db-nube}). A pesar de no haber conexión con la nube, el hospital mantiene su operación clínica. El médico puede seguir consultando fichas y registrando diagnósticos locales en \texttt{db-local}. El motor local registra estos cambios en el log del WAL lógico y mantiene los datos retenidos en su slot de replicación. Una vez restablecida la conexión WAN, la suscripción local se reconecta automáticamente, consume el backlog del slot y sincroniza todos los cambios pendientes sin pérdida de consistencia.
 
 \section{Conclusiones}
 \begin{itemize}
