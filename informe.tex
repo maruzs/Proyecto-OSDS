@@ -159,19 +159,21 @@ La siguiente tabla detalla qué componentes se comunican entre sí y las redes v
 \begin{table}[h!]
 \centering
 \small
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{llcllc}
 \toprule
 \textbf{Origen (VM / Contenedor)} & \textbf{Red} & \textbf{Pto. Origen} & \textbf{Destino (VM / Contenedor)} & \textbf{Pto. Destino} & \textbf{Protocolo} \\
 \midrule
 \texttt{cloudflare-tunnel} (VM3) & \texttt{dmz\_net} & Efímero & \texttt{nginx-proxy} (VM3) & 80 & HTTP \\
 \texttt{nginx-proxy} (VM3) & \texttt{hospital\_net} & Efímero & \texttt{app-estaciones} (VM1) & 8001 & WS (\texttt{/ws-medicas}) \\
-\texttt{nginx-proxy} (VM3) & \texttt{cloud\_net} & Efímero & \texttt{app-terminales} (VM2) & 8002 & WS (\texttt{/ws-admin}) \\
+\texttt{nginx-proxy} (VM3) & \texttt{cloud\_net} & Efímero & \texttt{app-terminales} (VM2) & 8002 & WS (\texttt{/ws-administrativas}) \\
 \texttt{app-estaciones} (VM1) & \texttt{hospital\_net} & Efímero & \texttt{db-local} (VM1) & 5432 & TCP (PostgreSQL) \\
 \texttt{app-terminales} (VM2) & \texttt{cloud\_net} & Efímero & \texttt{db-nube} (VM2) & 5432 & TCP (PostgreSQL) \\
 \texttt{db-local} (VM1) & GCP VPC & Efímero & \texttt{db-nube} (VM2) & 5432 & TCP (WAL Logical) \\
 \texttt{db-nube} (VM2) & GCP VPC & Efímero & \texttt{db-local} (VM1) & 5432 & TCP (WAL Logical) \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Matriz de conectividad de la infraestructura distribuida.}
 \label{tab:conectividad}
 \end{table}
