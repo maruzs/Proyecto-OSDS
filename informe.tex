@@ -42,7 +42,7 @@
 \renewcommand{\footrulewidth}{0.4pt}
 \lhead{\textcolor{navy}{\small\sffamily Proyecto Sistemas Operativos y Distribuidos}}
 \rhead{\textcolor{darkgray}{\small\sffamily Salud Digital}}
-\lfoot{\textcolor{darkgray}{\scriptsize\sffamily Integrantes: Hernandez, Muñoz, Martines, Paredes}}
+\lfoot{\textcolor{darkgray}{\scriptsize\sffamily Integrantes: Hernandez, Muñoz, Martinez, Paredes}}
 \rfoot{\textcolor{navy}{\small\sffamily Página \thepage}}
 
 % Personalización de Títulos de Sección con Titlesec
@@ -98,7 +98,7 @@
     \begin{tabular}{p{4cm}l}
         \textbf{Integrantes:} & Krisstal Hernandez \\
                               & Mariano Muñoz \\
-                              & Felipe Martines \\
+                              & Felipe Martinez \\
                               & Maximiliano Paredes \\[0.3cm]
         \textbf{Fecha:}       & 9 de junio de 2026
     \end{tabular}
@@ -131,10 +131,9 @@ Diseñar y desplegar una arquitectura distribuida que simule la infraestructura 
 
 \subsection{Objetivo específico}
 \begin{itemize}
-    \item Implementar la división de la infraestructura en subredes locales y en la nube para aislar el tráfico clínico local de las admisiones administrativas generales.
-    \item Habilitar un canal de replicación lógica bidireccional asíncrona entre las bases de datos para sincronizar fichas clínicas en segundo plano.
-    \item Desarrollar backends en Node.js usando Socket.io v4.7.5 para gestionar la comunicación clínica en tiempo real mediante eventos sobre WebSockets.
-    \item Configurar Nginx para actuar como proxy de borde, administrando los upgrades de protocolo HTTP a WebSocket y protegiendo el sistema con límites de peticiones.
+    \item Diseñar e implementar una topología de red híbrida y segmentada mediante redes virtuales en contenedores y máquinas virtuales (\texttt{hospital\_net}, \texttt{cloud\_net} y \texttt{dmz\_net}), aislando el tráfico del entorno físico local del entorno remoto en la nube para mitigar vectores de ataque y optimizar el flujo de datos.
+    \item Configurar un mecanismo de replicación lógica bidireccional asíncrona en el motor de base de datos utilizando un nivel de registro de escritura anticipada adecuado (\texttt{wal\_level = logical}), aplicando filtros condicionales basados en el origen del registro para mitigar bucles infinitos de datos y garantizar la consistencia eventual entre el nodo central y la caché local.
+    \item Desarrollar servicios backend desacoplados utilizando el protocolo WebSockets (mediante la librería Socket.io) para simular la lógica de negocio en tiempo real de las Estaciones Médicas y Terminales Administrativas, permitiendo una comunicación bidireccional de baja latencia para la gestión de fichas clínicas y admisiones de pacientes.
 \end{itemize}
 
 \section{Diseño arquitectónico y topología de red}
@@ -190,9 +189,13 @@ El sistema se modeló siguiendo una arquitectura con alta disponibilidad y redun
 \section{Detalle de componentes y módulos de aplicación}
 
 \subsection{Módulo de Estaciones médicas}
-El servidor de las Estaciones Médicas se ejecuta en Node.js y expone un servidor Socket.io en el puerto 8001 bajo el sub-path \texttt{/ws-medicas/}. Este módulo se comunica directamente con \texttt{db-local} y está encargado de atender las consultas de fichas del personal clínico.
+\subsubsection{Desarrollo Backend WebSocket}
+El servidor del módulo de Estaciones Médicas fue desarrollado en Node.js utilizando la librería Socket.io v4.7.5, levantando el servicio en el puerto 8001 bajo el sub-path \texttt{/ws-medicas/}. Esta configuración permite al proxy inverso Nginx identificar y enrutar correctamente el tráfico hacia este módulo de forma independiente al módulo administrativo. Se implementaron dos eventos principales de comunicación bidireccional:
+\begin{itemize}
+    \item \texttt{consultar\_paciente}: recibe un RUT como parámetro, consulta la base de datos local y retorna la ficha clínica activa del paciente.
+    \item \texttt{actualizar\_diagnostico}: recibe el identificador UUID del registro junto al nuevo diagnóstico, ejecutando una operación \texttt{UPDATE} directa sobre la tabla \texttt{fichas\_pacientes}.
+\end{itemize}
 
-\subsubsection{Implementación del Servidor WebSocket}
 El código en \texttt{server.js} gestiona las consultas clínicas mediante el pool de conexiones de la librería \texttt{pg}:
 
 \begin{lstlisting}[language=JavaScript, caption=Eventos de consulta y actualización clínica en Estaciones Médicas.]
@@ -237,7 +240,10 @@ socket.on('actualizar_diagnostico', async (data) => {
 \end{lstlisting}
 
 \subsubsection{Manejo de caché de alta demanda}
-La base local \texttt{db-local} actúa como caché física. Para simular el comportamiento clínico local en caso de desconexión WAN, se inicializan tres fichas de prueba en el script de base de datos local:
+La base de datos local (\texttt{db-local}) corre en un contenedor PostgreSQL 16 dentro de la red \texttt{hospital\_net}, aislada de la base de datos de la nube. Actúa como caché de alta demanda, almacenando las fichas clínicas activas de los pacientes en atención, permitiendo que las estaciones médicas operen con baja latencia sin depender de la disponibilidad de la conexión externa.
+
+\subsubsection{Simulación del flujo clínico}
+El flujo comienza cuando el módulo administrativo admite un paciente, generando un UUID y almacenando su ficha en la base de datos de la nube. Una vez replicado el registro hacia \texttt{db-local}, el médico puede consultar la ficha ingresando el RUT del paciente desde su estación. Con los datos en pantalla, el médico actualiza el diagnóstico usando el UUID del registro, quedando el cambio persistido localmente. Para simular este flujo, se precargaron tres fichas de prueba en \texttt{db-local} al inicializar el contenedor, representando casos clínicos reales como controles crónicos, urgencias y altas médicas:
 
 \begin{lstlisting}[language=SQL, caption=Precarga de datos en db-local (init-local.sql)]
 INSERT INTO fichas_pacientes (id, rut, nombre, diagnostico, origen_registro)
@@ -249,9 +255,12 @@ ON CONFLICT (id) DO NOTHING;
 \end{lstlisting}
 
 \subsection{Módulo de Terminales Administrativas}
-El servidor de Terminales Administrativas opera en la nube (puerto 8002, sub-path \texttt{/ws-administrativas}) y procesa la admisión de pacientes agregando metadatos de sincronización distribuida.
+\subsubsection{Desarrollo de Backend de comunicación síncrona}
+Se programa el servidor Node.js usando Socket.io sobre el protocolo WebSocket, configurando el puerto 8002 y el sub-path \texttt{/ws-administrativas} para el enrutamiento del proxy inverso.
 
-\subsubsection{Inyección de Metadatos y Validación de Roles (RBAC)}
+\subsubsection{Lógica de negocio e inyección de metadatos}
+Se implementa el manejador de eventos \texttt{admitir\_paciente}, el cual gestiona la concurrencia, mitiga colisiones relacionales mediante identificadores universales y añade el metadato crítico \texttt{origen\_registro: 'nube'} para activar las reglas de replicación selectiva condicional de PostgreSQL 16.
+
 Para prevenir que usuarios clínicos modifiquen los flujos de admisión y asegurar el control de acceso en red, el backend valida el rol del emisor y genera identificadores universales (UUID) para evitar colisiones de llaves primarias en la réplica:
 
 \begin{lstlisting}[language=JavaScript, caption=Gestión de admisiones en terminales-administrativas/server.js]
@@ -306,6 +315,10 @@ Para desplegar los servicios de forma controlada usamos archivos \texttt{docker-
 \end{itemize}
 
 \subsection{Módulo de Seguridad Perimetral y Capa Cliente}
+El Módulo de Seguridad Perimetral y Capa Cliente se estructura sobre un servidor Nginx configurado como Reverse Proxy en la máquina virtual \texttt{vm-gateway}, actuando como el único punto de entrada público para mitigar la exposición directa de la infraestructura interna desplegada en la VPC de GCP. Este proxy gestiona la redirección del tráfico y la posterior negociación de la actualización del protocolo (Protocol Upgrade) a WebSockets bidireccionales de forma segura (\texttt{wss://}) inyectando las cabeceras \texttt{Upgrade} y \texttt{Connection} requeridas para establecer y mantener la comunicación persistente y en tiempo real con los backends de las Estaciones Médicas y Terminales Administrativas.
+
+Por su parte, la Capa Cliente consiste en un frontend de simulación desarrollado con tecnologías web nativas (HTML y CSS) que adopta una estética visual optimizada para entornos clínicos. Dicha interfaz implementa controles basados en roles (Médico, Enfermero y Administrativo) que limitan la visualización de paneles específicos e integran dinámicamente el contexto y la identidad del usuario profesional en la carga útil de cada mensaje WebSocket enviado, asegurando la trazabilidad y el control de acceso a nivel de aplicación en los servicios distribuidos.
+
 Nginx actúa como puerta de enlace de red en la VM3. Aplicamos \texttt{server\_tokens off} para ocultar su versión. Configuramos rate limiting usando \texttt{limit\_req\_zone} con una zona de almacenamiento en memoria de 10 MB para soportar una tasa base de 10 peticiones por segundo por IP, permitiendo ráfagas transitorias de hasta 15 peticiones sin retardo inicial (\texttt{burst=15 nodelay}) en las rutas de WebSocket.
 
 \subsubsection{Negociación y timeouts de WebSockets}
