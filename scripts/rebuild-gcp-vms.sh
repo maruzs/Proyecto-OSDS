@@ -85,58 +85,51 @@ BRANCH="parte3/general"
 
 # Configurar VM 1 (Hospital Local)
 gcloud compute ssh vm-hospital-local --zone=$ZONE --command="
-  git clone $REPO_URL ~/Proyecto-OSDS || (cd ~/Proyecto-OSDS && git fetch origin)
+  sudo rm -rf ~/Proyecto-OSDS
+  git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
   cd ~/Proyecto-OSDS
   git checkout $BRANCH
-  git pull origin $BRANCH
+  cd vms/vm1-hospital
+  sudo docker rm -f app-estaciones db-local 2>/dev/null || true
+  sudo docker compose down --remove-orphans 2>/dev/null || true
+  sudo docker compose up --build -d
+  sleep 5
+  sudo docker exec -i db-local psql -U postgres -d clinica -c 'ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;'
 "
 
 # Configurar VM 2 (Nube Central)
 gcloud compute ssh vm-nube-central --zone=$ZONE --command="
-  git clone $REPO_URL ~/Proyecto-OSDS || (cd ~/Proyecto-OSDS && git fetch origin)
+  sudo rm -rf ~/Proyecto-OSDS
+  git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
   cd ~/Proyecto-OSDS
   git checkout $BRANCH
-  git pull origin $BRANCH
+  cd vms/vm2-nube
+  sudo docker rm -f app-terminales db-nube 2>/dev/null || true
+  sudo docker compose down --remove-orphans 2>/dev/null || true
+  sudo docker compose up --build -d
+  sleep 5
+  sudo docker exec -i db-nube psql -U postgres -d clinica -c 'ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;'
 "
 
-# Configurar VM 3 (Gateway / Nginx)
+# Configurar VM 3 (Gateway)
 gcloud compute ssh vm-gateway --zone=$ZONE --command="
-  git clone $REPO_URL ~/Proyecto-OSDS || (cd ~/Proyecto-OSDS && git fetch origin)
+  sudo rm -rf ~/Proyecto-OSDS
+  git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
   cd ~/Proyecto-OSDS
   git checkout $BRANCH
-  git pull origin $BRANCH
+  cd vms/vm3-gateway
+  sudo docker rm -f nginx-proxy cloudflare-tunnel 2>/dev/null || true
+  sudo docker compose down --remove-orphans 2>/dev/null || true
+  sudo docker compose up -d
 "
 
-# ------------------------------------------------------------------------------
-# 3. DESPLIEGUE DE CONTENEDORES
-# ------------------------------------------------------------------------------
-echo "🐳 Desplegando contenedores en cada nodo..."
+echo "🔗 Configurando la replicación lógica bidireccional..."
+# Crear suscripción en VM2 (Nube Central) conectando a la VM1
+gcloud compute ssh vm-nube-central --zone=$ZONE --command="sudo docker exec -i db-nube psql -U postgres -d clinica -c \"CREATE SUBSCRIPTION sub_desde_local CONNECTION 'host=db-local port=5432 dbname=clinica user=postgres password=postgres_secure_pass' PUBLICATION pub_local_a_nube WITH (copy_data = false);\""
 
-# Desplegar VM 1 (Hospital)
-gcloud compute ssh vm-hospital-local --zone=$ZONE --command="
-  cd ~/Proyecto-OSDS/vms/vm1-hospital
-  sudo docker-compose down --remove-orphans
-  sudo docker-compose up --build -d
-  sleep 5
-  sudo docker exec -it db-local psql -U postgres -d clinica -c 'ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;'
-"
-
-# Desplegar VM 2 (Nube)
-gcloud compute ssh vm-nube-central --zone=$ZONE --command="
-  cd ~/Proyecto-OSDS/vms/vm2-nube
-  sudo docker-compose down --remove-orphans
-  sudo docker-compose up --build -d
-  sleep 5
-  sudo docker exec -it db-nube psql -U postgres -d clinica -c 'ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;'
-"
-
-# Desplegar VM 3 (Gateway) - NOTA: Reemplazar TUNNEL_TOKEN en Cloudflare Tunnel si cambia
-gcloud compute ssh vm-gateway --zone=$ZONE --command="
-  cd ~/Proyecto-OSDS/vms/vm3-gateway
-  sudo docker-compose down --remove-orphans
-  # Se asume que el token está configurado en .env o se pasa como variable
-  sudo docker-compose up -d
-"
+# Crear suscripción en VM1 (Hospital Local) conectando a la VM2
+gcloud compute ssh vm-hospital-local --zone=$ZONE --command="sudo docker exec -i db-local psql -U postgres -d clinica -c \"CREATE SUBSCRIPTION sub_desde_nube CONNECTION 'host=db-nube port=5432 dbname=clinica user=postgres password=postgres_secure_pass' PUBLICATION pub_nube_a_local WITH (copy_data = false);\""
 
 echo "✅ Infraestructura desplegada exitosamente."
 echo "🔗 Recuerda configurar la replicación lógica bidireccional una vez que todo esté activo."
+
