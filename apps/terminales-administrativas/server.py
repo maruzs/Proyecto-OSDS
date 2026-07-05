@@ -8,9 +8,9 @@ from aiohttp import web
 
 # 1. Configuración del Servidor Socket.io asíncrono
 # Se configura el path coincidiendo con el mapeado por Nginx: /ws-administrativas
-sio = socketio.AsyncServer(cors_allowed_origins="*", socketio_path="/ws-administrativas")
+sio = socketio.AsyncServer(cors_allowed_origins="*")
 app = web.Application()
-sio.attach(app)
+sio.attach(app, socketio_path="/ws-administrativas")
 
 # Pool de conexiones de base de datos
 db_pool = None
