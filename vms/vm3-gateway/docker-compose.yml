@@ -22,7 +22,7 @@ services:
     image: cloudflare/cloudflared:latest # Para no abrir puertos Ingress y reducir la superficie de ataque
     container_name: cloudflare-tunnel # abriendo un canal de salida cifrado hacia la red global de Cloudflare
     restart: always
-    command: tunnel run
+    command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
     networks:
