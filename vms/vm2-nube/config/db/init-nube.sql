@@ -14,4 +14,5 @@ ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;
 DROP PUBLICATION IF EXISTS pub_nube_a_local;
 CREATE PUBLICATION pub_nube_a_local FOR TABLE fichas_pacientes WHERE (origen_registro = 'nube');
 
-
+-- Crear rol de replicación física para db-nube-replica
+CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD 'repl_secure_pass';

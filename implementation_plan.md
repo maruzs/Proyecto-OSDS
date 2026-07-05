@@ -1,70 +1,61 @@
-# Plan de Implementación - Punto 1: Migración a MariaDB en Hospital Local (VM1)
+# Plan de Implementación - Punto 2: Base de Datos PostgreSQL (Maestro-Réplica) y Aplicación Heterogénea en Python (VM2)
 
-Este plan detalla los pasos para migrar la base de datos del **Hospital Local (VM1)** desde PostgreSQL a una arquitectura tolerante a fallos basada en **MariaDB (Maestro-Réplica)**, con un balanceador/orquestador **HAProxy** para enrutar el tráfico de base de datos.
+Este plan detalla los pasos para configurar la base de datos de la **Nube Central (VM2)** con tolerancia a fallos mediante **PostgreSQL (Maestro-Réplica)** y un balanceador **HAProxy**, además de migrar la **Aplicación 2 (Terminales Administrativas)** a **Python** para cumplir con el requerimiento de heterogeneidad de lenguajes de programación.
 
 ---
 
-## 🏗️ Nueva Arquitectura de Base de Datos para VM1
+## 🏗️ Estructura Propuesta para la VM2
 
-Reemplazaremos la instancia única de PostgreSQL por tres contenedores interconectados dentro de la red `hospital_net` de la VM1:
+Reestructuraremos los servicios de la VM2 para incluir tolerancia a fallos en la base de datos y correr la aplicación en Python:
 
 ```mermaid
 graph TD
-    App[Aplicación 1: Estaciones Médicas] -->|Puerto 3306| Proxy[db-local-proxy: HAProxy]
-    Proxy -->|Escribe / Lee| Master[db-local-master: MariaDB]
-    Master -->|Replicación Binlog| Replica[db-local-replica: MariaDB]
+    App[Aplicación 2: Terminales Administrativas (Python)] -->|Puerto 5432| Proxy[db-nube-proxy: HAProxy]
+    Proxy -->|Escribe / Lee| Master[db-nube-master: PostgreSQL 16]
+    Master -->|Replicación Lógica / Física| Replica[db-nube-replica: PostgreSQL 16]
     Proxy -.->|Fallback / Lectura si Master cae| Replica
 ```
 
-1. **`db-local-master` (MariaDB Primario):** Procesa escrituras y lecturas principales.
-2. **`db-local-replica` (MariaDB Réplica):** Sigue al maestro de forma asíncrona mediante replicación clásica por log binario.
-3. **`db-local-proxy` (HAProxy / Orquestador de Failover):** Expone el puerto `3306` hacia la aplicación. Monitorea la salud del maestro; si este cae, redirige las peticiones a la réplica para mantener la continuidad operacional.
+1. **`db-nube-master` (Postgres Primario):** Instancia principal que almacena y publica las admisiones.
+2. **`db-nube-replica` (Postgres Réplica):** Réplica que consume los logs de transacciones del maestro.
+3. **`db-nube-proxy` (HAProxy):** Proxy TCP expuesto en el puerto `5432` que redirige el tráfico hacia el maestro y maneja failover.
+4. **`app-terminales` (FastAPI / Python-SocketIO):** Backend migrado a Python.
 
 ---
 
 ## 🛠️ Cambios Propuestos por Componente
 
-### 1. [MODIFY] [docker-compose.yml](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm1-hospital/docker-compose.yml)
-*   Eliminar el servicio `db-local` basado en PostgreSQL.
-*   Agregar `db-local-master` (MariaDB) montando un volumen y el script de inicialización.
-*   Agregar `db-local-replica` (MariaDB) configurado para conectarse al maestro.
-*   Agregar `db-local-proxy` (HAProxy) con reglas de balanceo y detección de fallos.
-*   Actualizar las variables de entorno de la aplicación `app-estaciones` para conectarse a `db-local-proxy:3306` con la librería de MariaDB/MySQL.
+### 1. [MODIFY] [docker-compose.yml](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm2-nube/docker-compose.yml)
+*   Reemplazar la base de datos única por `db-nube-master`, `db-nube-replica` y `db-nube-proxy` (HAProxy).
+*   Modificar la definición de `app-terminales` para construir desde el nuevo entorno de Python.
+*   Actualizar las variables de entorno para que apunten a `db-nube-proxy:5432`.
 
-### 2. [NEW] [haproxy.cfg](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm1-hospital/config/proxy/haproxy.cfg)
-*   Configurar HAProxy para escuchar en el puerto `3306`.
-*   Definir health checks tcp/mysql para `db-local-master` (principal) y `db-local-replica` (backup).
+### 2. [NEW] [haproxy.cfg](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm2-nube/config/proxy/haproxy.cfg)
+*   Configurar HAProxy para escuchar en el puerto `5432`.
+*   Definir health checks TCP para `db-nube-master` y `db-nube-replica` (backup).
 
-### 3. [NEW] [init-local.sql](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm1-hospital/config/db/init-local.sql)
-*   Reescribir la creación de la tabla `fichas_pacientes` adaptando tipos de datos a MariaDB:
-    *   Cambiar `UUID` a `VARCHAR(36)`.
-    *   Cambiar sintaxis de inserción de pruebas (`ON CONFLICT` a `ON DUPLICATE KEY UPDATE`).
-    *   Definir un usuario de replicación (`repl`) y permisos correspondientes.
+### 3. [NEW] [server.py](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm2-nube/apps/terminales-administrativas/server.py)
+*   Implementar el servidor Socket.io en Python utilizando `python-socketio` y `aiohttp` / `asyncio`.
+*   Conectar al pool de Postgres usando `asyncpg` para consultas asíncronas de alta velocidad.
+*   Mantener las reglas de seguridad (RBAC) verificando el rol `administrativo` antes de insertar.
+*   Insertar con origen de registro marcado como `nube` para habilitar la replicación selectiva entre VMs.
 
-### 4. [MODIFY] [server.js](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm1-hospital/apps/estaciones-medicas/server.js)
-*   Cambiar la dependencia `pg` por **`mysql2/promise`**.
-*   **Adaptación de SQL y Sintaxis de Consultas:**
-    *   MariaDB no soporta `RETURNING *` en sentencias `UPDATE`. Modificaremos el evento `actualizar_diagnostico` para que primero realice el `UPDATE` y luego haga un `SELECT` para retornar la ficha actualizada.
-    *   Cambiar marcadores de parámetros de Postgres (`$1, $2`) a MariaDB (`?, ?`).
-*   Actualizar la configuración del pool de conexiones.
+### 4. [NEW] [requirements.txt](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm2-nube/apps/terminales-administrativas/requirements.txt)
+*   Definir las dependencias: `python-socketio`, `asyncpg`, `aiohttp`, `cryptography`.
 
-### 5. [MODIFY] [package.json](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm1-hospital/apps/estaciones-medicas/package.json)
-*   Desinstalar `pg`.
-*   Agregar `mysql2` como dependencia.
+### 5. [NEW] [Dockerfile](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/vms/vm2-nube/apps/terminales-administrativas/Dockerfile)
+*   Reescribir el Dockerfile utilizando una imagen base liviana de Python (`python:3.10-slim`).
+*   Instalar las dependencias y ejecutar `python server.py`.
 
 ---
 
 ## 🧪 Plan de Verificación y Pruebas
 
-### Paso 1: Pruebas Locales (Docker local)
-1. Iniciar los contenedores en local: `docker compose up --build -d`.
-2. Verificar replicación:
-   * Insertar un registro de prueba en `db-local-master`.
-   * Conectarse a `db-local-replica` y comprobar que el registro se replicó.
-3. Verificar funcionamiento de la App:
-   * Conectarse al cliente WebSocket y realizar consultas y actualizaciones de diagnósticos.
+### Paso 1: Verificación de la Aplicación en Python
+*   Correr localmente con Docker y conectarse al puerto `8002`.
+*   Enviar un evento de prueba `admitir_paciente` y comprobar que se inserta correctamente en la base de datos PostgreSQL.
+*   Probar el filtro de seguridad enviando roles no autorizados (ej. "medico") y verificar el rechazo de la transacción.
 
-### Paso 2: Prueba de Tolerancia a Fallos de Base de Datos
-1. Detener el contenedor del maestro: `docker stop db-local-master`.
-2. Verificar en los logs de `db-local-proxy` que detectó la caída del master.
-3. Realizar una consulta desde la Estación Médica. HAProxy debe redirigir la consulta al nodo `db-local-replica` permitiendo la lectura de la ficha clínica (modo degradado/lectura en fallo).
+### Paso 2: Prueba de Tolerancia a Fallos de BD en VM2
+*   Detener `db-nube-master`.
+*   Verificar que HAProxy enruta las solicitudes a `db-nube-replica` de forma transparente.
