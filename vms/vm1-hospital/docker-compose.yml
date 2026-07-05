@@ -54,7 +54,7 @@ services:
       - dmz_net
 
   app-estaciones:
-    build: ./apps/estaciones-medicas
+    build: ../../apps/estaciones-medicas
     container_name: app-estaciones
     restart: always
     ports:
@@ -71,7 +71,7 @@ services:
       - db-local-proxy
 
   app-estaciones-replica:
-    build: ./apps/estaciones-medicas
+    build: ../../apps/estaciones-medicas
     container_name: app-estaciones-replica
     restart: always
     ports:

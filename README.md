@@ -6,15 +6,10 @@ Este repositorio contiene la solución completa de arquitectura distribuida para
 
 ## 📁 Estructura del Monorepo
 
-*   **`vms/`**: Contiene el código fuente y orquestación de cada una de las 3 VMs.
-    *   **`vm1-hospital/`**: Servidor de Box de Consulta (`app-estaciones` y `app-estaciones-replica` en Node.js) y base MariaDB (Maestro-Réplica + HAProxy).
-    *   **`vm2-nube/`**: Módulo administrativo de admisión (`app-terminales` y `app-terminales-replica` en **Python**) y base PostgreSQL 16 (Maestro-Réplica + HAProxy).
-    *   **`vm3-gateway/`**: Proxy inverso (`nginx-proxy`), Túnel Cloudflare, **Middleware** de integración (Node.js + SQLite de contingencia) y **Aplicación 3** de Bodega/Inventario (Node.js) con base de datos centralizada MySQL 8.0 (Maestro-Réplica + HAProxy).
-*   **`diagrama/`**: Contiene el diagrama de arquitectura actualizado (`arqui.puml`).
+*   **`apps/`**: Contiene el código fuente y frontend de cada servicio (estaciones médicas, admisión, bodega, middleware, frontend).
+*   **`vms/`**: Contiene las configuraciones de red, HAProxy, Nginx y orquestación de Docker Compose para simular cada una de las 3 VMs.
+*   **`docs/`**: Centraliza la documentación del proyecto, diagramas UML (`docs/diagrams/`) e informes formalizados (`docs/report/`).
 *   **`scripts/`**: Automatización de la infraestructura en GCP Cloud Shell.
-*   **`pruebasTolerancia.md`**: Guía paso a paso para simulaciones de caídas.
-*   **`documentacion.md`**: Explicación técnica detallada de la arquitectura.
-*   **`informe.tex`**: Informe formal en LaTeX.
 
 ---
 
@@ -56,7 +51,7 @@ gcloud compute ssh vm-gateway --zone=$ZONE --command="
 ---
 
 ## 🧪 Pruebas de Tolerancia a Fallos
-Consulte el archivo **[pruebasTolerancia.md](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/pruebasTolerancia.md)** para obtener instrucciones detalladas sobre cómo desconectar aplicaciones, bases de datos o el Middleware y validar la resiliencia del sistema.
+Consulte el archivo **[pruebasTolerancia.md](file:///c:/Users/Administrator/Desktop/Proyecto-OSDS/docs/pruebasTolerancia.md)** para obtener instrucciones detalladas sobre cómo desconectar aplicaciones, bases de datos o el Middleware y validar la resiliencia del sistema.
 
 ## 📖 Documentación Detallada
-Consulte el archivo **[documentacion.md](file:///home/maruzs/Desktop/Uni/OSDS/Proyecto-OSDS/documentacion.md)** para una explicación completa de las tecnologías, proxies HAProxy y lógica del worker de contingencia en segundo plano.
+Consulte el archivo **[documentacion.md](file:///c:/Users/Administrator/Desktop/Proyecto-OSDS/docs/documentacion.md)** para una explicación completa de las tecnologías, proxies HAProxy y lógica del worker de contingencia en segundo plano.

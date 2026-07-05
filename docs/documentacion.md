@@ -101,39 +101,40 @@ El **Middleware** implementa un búfer de contingencia local basado en **SQLite*
 
 ```
 Proyecto-OSDS/
-├── diagrama/
-│   └── arqui.puml          # Diagrama UML de la arquitectura Unidad 3
+├── apps/                   # Aplicaciones y servicios del monorepo (gestión pnpm)
+│   ├── estaciones-medicas/         # App 1: Backend de Estaciones Médicas (Node.js)
+│   ├── terminales-administrativas/ # App 2: Backend de Terminales Administrativas (Python)
+│   ├── app-bodega/                 # App 3: Sistema de Bodega (Node.js)
+│   ├── middleware/                 # Middleware y cola de contingencia (Node.js/Express)
+│   └── frontend/                   # Frontend SPA (HTML/JS)
+├── docs/                   # Documentación técnica, diagramas y reportes
+│   ├── diagrams/                   # Diagramas UML y png
+│   ├── report/                     # LaTeX e informes finales
+│   ├── documentacion.md            # Esta documentación técnica detallada
+│   ├── pruebasTolerancia.md        # Guía interactiva de pruebas de tolerancia a fallos
+│   └── guiaInfraestructura.md      # Guía detallada de la infraestructura
 ├── scripts/
 │   └── rebuild-gcp-vms.sh  # Script bash de reconstrucción total en GCP
-├── vms/
-│   ├── vm1-hospital/       # Configuración y código de VM1
-│   │   ├── apps/
-│   │   │   └── estaciones-medicas/   # Backend Node.js
+├── vms/                    # Configuración de red y contenedores para cada VM
+│   ├── vm1-hospital/       # Orquestación y proxies locales de la VM 1
 │   │   ├── config/
-│   │   │   ├── db/                   # Scripts SQL MariaDB
-│   │   │   └── proxy/                # Configuración HAProxy
-│   │   └── docker-compose.yml        # Orquestación VM1
+│   │   │   ├── db/                 # Scripts SQL de MariaDB
+│   │   │   └── proxy/              # Configuración de HAProxy MariaDB
+│   │   └── docker-compose.yml
 │   │
-│   ├── vm2-nube/           # Configuración y código de VM2
-│   │   ├── apps/
-│   │   │   └── terminales-administrativas/ # Backend Python
+│   ├── vm2-nube/           # Orquestación y proxies locales de la VM 2
 │   │   ├── config/
-│   │   │   ├── db/                   # Scripts SQL Postgres
-│   │   │   └── proxy/                # Configuración HAProxy
-│   │   └── docker-compose.yml        # Orquestación VM2
+│   │   │   ├── db/                 # Scripts SQL de PostgreSQL
+│   │   │   └── proxy/              # Configuración de HAProxy PostgreSQL
+│   │   └── docker-compose.yml
 │   │
-│   └── vm3-gateway/        # Configuración y código de VM3
-│       ├── apps/
-│       │   ├── frontend/             # SPA Cliente (HTML/JS)
-│       │   ├── middleware/           # API Middleware (Node.js)
-│       │   └── app-bodega/           # App 3 de Bodega (Node.js)
+│   └── vm3-gateway/        # Orquestación, proxies y Nginx del Gateway
 │       ├── config/
-│       │   ├── db/                   # Scripts SQL MySQL Central
-│       │   ├── nginx/                # Configuración Nginx Proxy
-│       │   └── proxy/                # Configuración HAProxy MySQL
-│       └── docker-compose.yml        # Orquestación VM3
-│
-├── README.md               # Documentación rápida e inicio rápido
-├── documentacion.md        # Esta documentación técnica detallada
-└── pruebasTolerancia.md    # Guía interactiva paso a paso de tolerancia a fallos
+│       │   ├── db/                 # Scripts SQL de MySQL Central
+│       │   ├── nginx/              # Configuración de Nginx Reverse Proxy
+│       │   └── proxy/              # Configuración de HAProxy MySQL
+│       └── docker-compose.yml
+├── README.md               # Guía rápida de inicio
+├── package.json            # Scripts de orquestación global
+└── pnpm-workspace.yaml     # Configuración del workspace del monorepo
 ```
