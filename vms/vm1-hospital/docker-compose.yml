@@ -1,22 +1,54 @@
 version: '3.8'
 
 services:
-  db-local:
-    image: postgres:16-alpine
-    container_name: db-local
+  db-local-master:
+    image: mariadb:10.11
+    container_name: db-local-master
     restart: always
     environment:
-      POSTGRES_DB: clinica
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_secure_pass
+      MARIADB_ROOT_PASSWORD: root_secure_pass
+      MARIADB_DATABASE: clinica
+      MARIADB_USER: clinica_user
+      MARIADB_PASSWORD: clinica_secure_pass
     volumes:
-      - db_local_data:/var/lib/postgresql/data
-      - ./config/db/init-local.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - db_local_master_data:/var/lib/mysql
+      - ./config/db/init-local.sql:/docker-entrypoint-initdb.d/init-local.sql:ro
+    command: mariadbd --server-id=1 --log-bin=mysql-bin --binlog-format=ROW
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - hospital_net
+
+  db-local-replica:
+    image: mariadb:10.11
+    container_name: db-local-replica
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: root_secure_pass
+    volumes:
+      - db_local_replica_data:/var/lib/mysql
+      - ./config/db/init-replica.sql:/docker-entrypoint-initdb.d/init-replica.sql:ro
+    command: mariadbd --server-id=2 --read-only=1
+    depends_on:
+      db-local-master:
+        condition: service_healthy
+    networks:
+      - hospital_net
+
+  db-local-proxy:
+    image: haproxy:2.8-alpine
+    container_name: db-local-proxy
+    restart: always
     ports:
-      - "5432:5432"
-    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
-    extra_hosts:
-      - "db-nube:10.128.0.20"
+      - "3306:3306"
+    volumes:
+      - ./config/proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - db-local-master
+      - db-local-replica
     networks:
       - hospital_net
       - dmz_net
@@ -28,15 +60,15 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - DB_HOST=db-local
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres_secure_pass
+      - DB_HOST=db-local-proxy
+      - DB_PORT=3306
+      - DB_USER=clinica_user
+      - DB_PASSWORD=clinica_secure_pass
       - DB_NAME=clinica
     networks:
       - hospital_net
     depends_on:
-      - db-local
+      - db-local-proxy
 
 networks:
   hospital_net:
@@ -47,5 +79,7 @@ networks:
     name: dmz_net
 
 volumes:
-  db_local_data:
-    name: db_local_data
+  db_local_master_data:
+    name: db_local_master_data
+  db_local_replica_data:
+    name: db_local_replica_data

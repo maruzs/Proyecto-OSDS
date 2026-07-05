@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { Pool } = require('pg');
+const mysql = require('mysql2/promise');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
@@ -12,16 +12,15 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-const pool = new Pool({
-    host: process.env.DB_HOST || 'db-local',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres_secure_pass',
+const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'db-local-proxy',
+    port: parseInt(process.env.DB_PORT || '3306'),
+    user: process.env.DB_USER || 'clinica_user',
+    password: process.env.DB_PASSWORD || 'clinica_secure_pass',
     database: process.env.DB_NAME || 'clinica',
-    port: 5432,
-});
-
-pool.on('error', (err) => {
-    console.error('Error inesperado en el pool de base de datos:', err);
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
 const PORT = 8001;
@@ -37,14 +36,14 @@ io.on('connection', (socket) => {
         }
 
         try {
-            const res = await pool.query(
-                'SELECT * FROM fichas_pacientes WHERE rut = $1',
+            const [rows] = await pool.query(
+                'SELECT * FROM fichas_pacientes WHERE rut = ?',
                 [data.rut]
             );
 
-            if (res.rows.length > 0) {
-                console.log(`[OK] Paciente encontrado. RUT: ${data.rut}, ID: ${res.rows[0].id}`);
-                socket.emit('ficha_paciente', { estado: 'OK', datos: res.rows[0] });
+            if (rows.length > 0) {
+                console.log(`[OK] Paciente encontrado. RUT: ${data.rut}, ID: ${rows[0].id}`);
+                socket.emit('ficha_paciente', { estado: 'OK', datos: rows[0] });
             } else {
                 console.warn(`[NOT_FOUND] Paciente no encontrado. RUT: ${data.rut}`);
                 socket.emit('ficha_paciente', { estado: 'NO_ENCONTRADO', datos: null });
@@ -63,17 +62,21 @@ io.on('connection', (socket) => {
         }
 
         try {
-            const res = await pool.query(
+            // MariaDB no soporta RETURNING *, por lo que realizamos el UPDATE y luego un SELECT
+            const [result] = await pool.query(
                 `UPDATE fichas_pacientes 
-                 SET diagnostico = $1, fecha_actualizacion = CURRENT_TIMESTAMP
-                 WHERE id = $2
-                 RETURNING *`,
+                 SET diagnostico = ?, fecha_actualizacion = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
                 [data.diagnostico, data.id]
             );
 
-            if (res.rows.length > 0) {
+            if (result.affectedRows > 0) {
+                const [rows] = await pool.query(
+                    'SELECT * FROM fichas_pacientes WHERE id = ?',
+                    [data.id]
+                );
                 console.log(`[OK] Diagnostico actualizado. ID: ${data.id}`);
-                socket.emit('diagnostico_actualizado', { estado: 'OK', datos: res.rows[0] });
+                socket.emit('diagnostico_actualizado', { estado: 'OK', datos: rows[0] });
             } else {
                 console.warn(`[NOT_FOUND] Ficha no encontrada para actualizar. ID: ${data.id}`);
                 socket.emit('diagnostico_actualizado', { estado: 'NO_ENCONTRADO', datos: null });
@@ -90,5 +93,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`[SISTEMA] Servidor Estaciones Medicas operativo en puerto ${PORT}`);
+    console.log(`[SISTEMA] Servidor Estaciones Medicas (MariaDB) operativo en puerto ${PORT}`);
 });
