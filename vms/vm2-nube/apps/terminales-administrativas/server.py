@@ -3,6 +3,7 @@ import uuid
 import datetime
 import socketio
 import asyncpg
+import aiohttp
 from aiohttp import web
 
 # 1. Configuración del Servidor Socket.io asíncrono
@@ -82,6 +83,17 @@ async def admitir_paciente(sid, data):
                 res_data["fecha_actualizacion"] = res_data["fecha_actualizacion"].isoformat()
 
             print(f"[OK] Paciente admitido y guardado en db-nube. ID: {res_data['id']}")
+
+            # Notificar al Middleware (VM3)
+            middleware_url = os.getenv("MIDDLEWARE_URL", "http://10.128.0.30:8000/api/mw/pacientes")
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(middleware_url, json=res_data) as resp:
+                        mw_res = await resp.json()
+                        print(f"[MIDDLEWARE] Notificacion enviada. Respuesta: {mw_res}")
+            except Exception as err_mw:
+                print(f"[MIDDLEWARE_ERROR] Error al notificar al Middleware: {err_mw}")
+
             # Difusión masiva a todos los clientes conectados
             await sio.emit("paciente_admitido_confirmado", res_data)
 

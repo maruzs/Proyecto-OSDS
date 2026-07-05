@@ -2,7 +2,6 @@ version: '3.8'
 
 services:
   nginx-proxy:
-    # NPM conectado con cloudflared
     image: nginx:alpine
     container_name: nginx-proxy
     restart: always
@@ -15,18 +14,105 @@ services:
     networks:
       - hospital_net
       - cloud_net
-      - dmz_net # Red que conecta el tunel con el NPM
+      - dmz_net
 
   tunnel:
-    # Todo el trafico entra por Cloudflare que ya tiene medidas de seguridad y luego lo redirige al nginx-proxy:80
-    image: cloudflare/cloudflared:latest # Para no abrir puertos Ingress y reducir la superficie de ataque
-    container_name: cloudflare-tunnel # abriendo un canal de salida cifrado hacia la red global de Cloudflare
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare-tunnel
     restart: always
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
     networks:
       - dmz_net
+
+  middleware:
+    build: ./apps/middleware
+    container_name: app-middleware
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_CENTRAL_HOST=db-central-proxy
+      - DB_CENTRAL_PORT=3306
+      - DB_CENTRAL_USER=clinica_user
+      - DB_CENTRAL_PASSWORD=clinica_secure_pass
+      - DB_CENTRAL_NAME=clinica_central
+      - BODEGA_APP_URL=http://app-bodega:8003
+    depends_on:
+      - db-central-proxy
+    networks:
+      - hospital_net
+      - cloud_net
+
+  app-bodega:
+    build: ./apps/app-bodega
+    container_name: app-bodega
+    restart: always
+    ports:
+      - "8003:8003"
+    environment:
+      - DB_CENTRAL_HOST=db-central-proxy
+      - DB_CENTRAL_PORT=3306
+      - DB_CENTRAL_USER=clinica_user
+      - DB_CENTRAL_PASSWORD=clinica_secure_pass
+      - DB_CENTRAL_NAME=clinica_central
+    depends_on:
+      - db-central-proxy
+    networks:
+      - cloud_net
+
+  db-central-master:
+    image: mysql:8.0
+    container_name: db-central-master
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secure_pass
+      MYSQL_DATABASE: clinica_central
+      MYSQL_USER: clinica_user
+      MYSQL_PASSWORD: clinica_secure_pass
+    volumes:
+      - db_central_master_data:/var/lib/mysql
+      - ./config/db/init-central.sql:/docker-entrypoint-initdb.d/init-central.sql:ro
+    command: --server-id=10 --log-bin=mysql-bin --binlog-format=ROW
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cloud_net
+
+  db-central-replica:
+    image: mysql:8.0
+    container_name: db-central-replica
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secure_pass
+    volumes:
+      - db_central_replica_data:/var/lib/mysql
+      - ./config/db/init-replica-mysql.sql:/docker-entrypoint-initdb.d/init-replica-mysql.sql:ro
+    command: --server-id=20 --read-only=1
+    depends_on:
+      db-central-master:
+        condition: service_healthy
+    networks:
+      - cloud_net
+
+  db-central-proxy:
+    image: haproxy:2.8-alpine
+    container_name: db-central-proxy
+    restart: always
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./config/proxy/haproxy-mysql.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - db-central-master
+      - db-central-replica
+    networks:
+      - cloud_net
+      - hospital_net
 
 networks:
   hospital_net:
@@ -38,3 +124,9 @@ networks:
   dmz_net:
     driver: bridge
     name: dmz_net
+
+volumes:
+  db_central_master_data:
+    name: db_central_master_data
+  db_central_replica_data:
+    name: db_central_replica_data

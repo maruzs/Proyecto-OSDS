@@ -77,6 +77,21 @@ io.on('connection', (socket) => {
                 );
                 console.log(`[OK] Diagnostico actualizado. ID: ${data.id}`);
                 socket.emit('diagnostico_actualizado', { estado: 'OK', datos: rows[0] });
+
+                // Notificar al Middleware (VM3)
+                const middlewareUrl = process.env.MIDDLEWARE_URL || 'http://10.128.0.30:8000/api/mw/diagnosticos';
+                fetch(middlewareUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: rows[0].id,
+                        rut: rows[0].rut,
+                        diagnostico: rows[0].diagnostico,
+                        origen_registro: rows[0].origen_registro
+                    })
+                }).then(res => res.json())
+                  .then(mwRes => console.log('[MIDDLEWARE] Notificacion enviada:', mwRes))
+                  .catch(errMw => console.error('[MIDDLEWARE_ERROR] Error al notificar:', errMw.message));
             } else {
                 console.warn(`[NOT_FOUND] Ficha no encontrada para actualizar. ID: ${data.id}`);
                 socket.emit('diagnostico_actualizado', { estado: 'NO_ENCONTRADO', datos: null });
