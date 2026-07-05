@@ -51,7 +51,24 @@ gcloud compute ssh vm-gateway --zone=$ZONE --command="
 ---
 
 ## 🧪 Pruebas de Tolerancia a Fallos
-Consulte el archivo **[pruebasTolerancia.md](file:///c:/Users/Administrator/Desktop/Proyecto-OSDS/docs/pruebasTolerancia.md)** para obtener instrucciones detalladas sobre cómo desconectar aplicaciones, bases de datos o el Middleware y validar la resiliencia del sistema.
+Consulte **[pruebasTolerancia.md](docs/pruebasTolerancia.md)** para instrucciones detalladas paso a paso sobre cómo ejecutar los tres escenarios de fallo (aplicación, base de datos y middleware).
 
-## 📖 Documentación Detallada
-Consulte el archivo **[documentacion.md](file:///c:/Users/Administrator/Desktop/Proyecto-OSDS/docs/documentacion.md)** para una explicación completa de las tecnologías, proxies HAProxy y lógica del worker de contingencia en segundo plano.
+---
+
+## 📚 Documentación Completa
+
+| Documento | Descripción |
+|-----------|-------------|
+| [documentacion.md](docs/documentacion.md) | Arquitectura general, topología de red, tolerancia a fallos y flujo de negocio |
+| [pruebasTolerancia.md](docs/pruebasTolerancia.md) | Guía paso a paso de las 3 pruebas de tolerancia |
+| [**sla-slo.md**](docs/sla-slo.md) | **Propuesta formal de SLA y SLO** con métricas, penalizaciones y responsabilidades |
+| [guiaInfraestructura.md](docs/guiaInfraestructura.md) | Guía detallada de la infraestructura GCP |
+| [tareas.md](docs/tareas.md) | Distribución de tareas por integrante y estado de entregables |
+| [logs.md](docs/logs.md) | Logs reales del despliegue en GCP y pruebas ejecutadas |
+
+### Informes formales (LaTeX)
+
+| Informe | Descripción |
+|---------|-------------|
+| [informe.tex](docs/report/informe.tex) | Informe Entrega 1 (30-06-2026) |
+| [**informeFinal.tex**](docs/report/informeFinal.tex) | **Informe Final Entrega 2 (07-07-2026)** — incluye SLA/SLO, pruebas y módulo Bodega |
