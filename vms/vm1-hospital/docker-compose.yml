@@ -70,6 +70,23 @@ services:
     depends_on:
       - db-local-proxy
 
+  app-estaciones-replica:
+    build: ./apps/estaciones-medicas
+    container_name: app-estaciones-replica
+    restart: always
+    ports:
+      - "8011:8001"
+    environment:
+      - DB_HOST=db-local-proxy
+      - DB_PORT=3306
+      - DB_USER=clinica_user
+      - DB_PASSWORD=clinica_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - hospital_net
+    depends_on:
+      - db-local-proxy
+
 networks:
   hospital_net:
     driver: bridge
