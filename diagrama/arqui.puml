@@ -1,0 +1,109 @@
+@uml Arquitectura OSDS: Centro de Salud Digital - Unidad 3
+title Arquitectura General Multi-Base de Datos y Middleware (3 VMs en GCP)
+
+' Ajustes de Diseño Visual (Moderno y Limpio)
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+
+' Definición de Colores y Estilos
+skinparam package {
+    BorderColor #4A90E2
+    BackgroundColor #EAF3FF
+}
+
+skinparam node {
+    BorderColor #2E8B57
+    BackgroundColor #F4FBF7
+    FontName Arial
+}
+
+skinparam database {
+    BorderColor #D2691E
+    BackgroundColor #FFF8DC
+    FontName Arial
+}
+
+left to right direction
+
+' ==========================================
+' CAPA CLIENTE
+' ==========================================
+cloud "Internet (Acceso Seguro)" as CAPA_CLIENTE #F0F9FF {
+    actor "Personal Clínico\ny Administrativo" as CLIENT #FFFFFF
+    note bottom of CLIENT
+        Acceso unificado vía HTTPS/WSS a:
+        https://osds.epistia.cl
+    end note
+}
+
+' ==========================================
+' INFRAESTRUCTURA DE GOOGLE CLOUD PLATFORM
+' ==========================================
+package "Google Cloud Platform (VPC Network)" as GCP #EAF3FF {
+
+    ' VM 3: GATEWAY DE SEGURIDAD, MIDDLEWARE Y SERVICIO CENTRAL
+    frame "VM 3: Gateway, Middleware y Bodega (vm-gateway)\nIP: 10.128.0.30" as VM3 #FFFFFF {
+        node "nginx-proxy\n(Proxy Inverso + Upstreams)" as NGINX #F4FBF7
+        node "cloudflare-tunnel\n(Cliente Cloudflared)" as TUNNEL #F4FBF7
+        node "app-middleware\n(Middleware Express.js)" as MW #F4FBF7
+        database "contingencia.db\n(SQLite Local Queue)" as SQLITE
+        node "app-bodega\n(App 3: Inventario)" as BODEGA #F4FBF7
+        node "db-central-proxy\n(HAProxy MySQL)" as DBC_PROXY #F4FBF7
+        database "db-central-master\n(MySQL Master)" as DBC_MASTER
+        database "db-central-replica\n(MySQL Replica)" as DBC_REPLICA
+        
+        TUNNEL -[#blue,bold]-> NGINX : Enrutamiento HTTPS
+        MW -.-> SQLITE : Almacenamiento Offline (Contingencia)
+        BODEGA --> DBC_PROXY : Consultas Stock
+        DBC_PROXY --> DBC_MASTER : Escrituras/Lecturas
+        DBC_PROXY -.-> DBC_REPLICA : Backup (Failover)
+        DBC_MASTER -[#purple,dotted]-> DBC_REPLICA : Replicación Física (Puerto 3306)
+    }
+
+    ' VM 1: HOSPITAL LOCAL
+    frame "VM 1: Hospital Local (vm-hospital-local)\nIP: 10.128.0.10" as VM1 #FFFFFF {
+        node "app-estaciones\n(Servidor Principal Node)" as ESTACIONES #F4FBF7
+        node "app-estaciones-replica\n(Servidor Réplica Node)" as ESTACIONES_REP #F4FBF7
+        node "db-local-proxy\n(HAProxy MariaDB)" as DBL_PROXY #F4FBF7
+        database "db-local-master\n(MariaDB Master)" as DBL_MASTER
+        database "db-local-replica\n(MariaDB Replica)" as DBL_REPLICA
+        
+        ESTACIONES --> DBL_PROXY : Puerto 3306
+        ESTACIONES_REP --> DBL_PROXY : Puerto 3306
+        DBL_PROXY --> DBL_MASTER : Escrituras/Lecturas
+        DBL_PROXY -.-> DBL_REPLICA : Backup (Failover)
+        DBL_MASTER -[#purple,dotted]-> DBL_REPLICA : Replicación Master-Replica
+    }
+
+    ' VM 2: NUBE CENTRAL
+    frame "VM 2: Nube Central (vm-nube-central)\nIP: 10.128.0.20" as VM2 #FFFFFF {
+        node "app-terminales\n(Servidor Principal Python)" as TERMINALES #F4FBF7
+        node "app-terminales-replica\n(Servidor Réplica Python)" as TERMINALES_REP #F4FBF7
+        node "db-nube-proxy\n(HAProxy Postgres)" as DBN_PROXY #F4FBF7
+        database "db-nube-master\n(PostgreSQL Master)" as DBN_MASTER
+        database "db-nube-replica\n(PostgreSQL Replica)" as DBN_REPLICA
+        
+        TERMINALES --> DBN_PROXY : Puerto 5432
+        TERMINALES_REP --> DBN_PROXY : Puerto 5432
+        DBN_PROXY --> DBN_MASTER : Escrituras/Lecturas
+        DBN_PROXY -.-> DBN_REPLICA : Backup (Failover)
+        DBN_MASTER -[#purple,dotted]-> DBN_REPLICA : Replicación Física (pg_basebackup)
+    }
+}
+
+' ==========================================
+' FLUJOS DE RED Y CONECTIVIDAD DE INTEGRACIÓN
+' ==========================================
+CLIENT -[#red,bold]-> TUNNEL : 1. Tránsito Seguro
+NGINX -[#orange,bold]-> ESTACIONES : 2a. Proxy /ws-medicas\n(Round Robin / Failover a Réplica)
+NGINX -[#orange,bold]-> TERMINALES : 2b. Proxy /ws-administrativas\n(Round Robin / Failover a Réplica)
+
+' Conexiones de Sincronización del Middleware
+ESTACIONES -[#blue,dashed]-> MW : 3. Notificación Diagnóstico\n(HTTP POST Puerto 8000)
+TERMINALES -[#blue,dashed]-> MW : 4. Sincronización Admisión\n(HTTP POST Puerto 8000)
+MW --> DBC_PROXY : 5. Consolidación de Registros\n(MySQL Puerto 3306)
+MW -[#green,bold]-> BODEGA : 6. Descuento de Stock\n(HTTP POST Puerto 8003)
+
+@enduml

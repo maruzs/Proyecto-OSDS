@@ -4,7 +4,7 @@ Esta guía contiene los procedimientos paso a paso para simular, probar y docume
 
 ---
 
-## 🛠️ PRUEBA 1: Caída del Servidor de Aplicación Principal
+## PRUEBA 1: Caída del Servidor de Aplicación Principal
 **Objetivo:** Demostrar que el Gateway (Nginx) detecta la caída de un servidor de aplicación principal (VM1 o VM2) y redirige automáticamente todo el tráfico hacia su correspondiente réplica de aplicación sin interrumpir el servicio al usuario.
 
 ### Paso a Paso del Procedimiento:
@@ -31,7 +31,7 @@ Esta guía contiene los procedimientos paso a paso para simular, probar y docume
      gcloud compute ssh vm-nube-central --zone=us-central1-a --command="sudo docker start app-terminales"
      ```
 
-### 📸 Qué Documentar en el Informe:
+### Qué Documentar en el Informe:
 *   **Captura de Pantalla 1:** El panel de red del navegador (`F12`) mostrando que la petición de admisión fue exitosa a pesar del corte.
 *   **Logs de Nginx (VM3):** Ejecuta este comando en Cloud Shell y copia el output que muestre el desvío del tráfico a la réplica:
     ```bash
@@ -41,7 +41,7 @@ Esta guía contiene los procedimientos paso a paso para simular, probar y docume
 
 ---
 
-## 💾 PRUEBA 2: Interrupción de la Base de Datos Principal
+## PRUEBA 2: Interrupción de la Base de Datos Principal
 **Objetivo:** Demostrar que al apagarse el motor de base de datos principal (Maestro), el proxy local (HAProxy) detecta la caída y redirige las consultas a la base de datos Réplica de manera instantánea y transparente para la aplicación.
 
 ### Paso a Paso del Procedimiento:
@@ -61,7 +61,7 @@ Esta guía contiene los procedimientos paso a paso para simular, probar y docume
      gcloud compute ssh vm-hospital-local --zone=us-central1-a --command="sudo docker start db-local-master"
      ```
 
-### 📸 Qué Documentar en el Informe:
+### Qué Documentar en el Informe:
 *   **Captura de Pantalla 2:** La interfaz web cargando correctamente los datos clínicos de un paciente mientras la base principal está caída.
 *   **Logs de HAProxy (VM1):** Copia los logs que evidencien que detectó la caída del servidor `db-master` y marcó como activo el servidor `db-replica`:
     ```bash
@@ -70,7 +70,7 @@ Esta guía contiene los procedimientos paso a paso para simular, probar y docume
 
 ---
 
-## 🔀 PRUEBA 3: Caída del Middleware y Recuperación Asíncrona (Cola Contingencia)
+## PRUEBA 3: Caída del Middleware y Recuperación Asíncrona (Cola Contingencia)
 **Objetivo:** Probar que si el Middleware no puede comunicarse con la Aplicación de Bodega (o con la base MySQL central), almacena de forma segura la transacción localmente en una base de datos SQLite de contingencia y la sincroniza de forma retroactiva cuando el servicio vuelve a estar en línea.
 
 ### Paso a Paso del Procedimiento:
@@ -112,7 +112,7 @@ Esta guía contiene los procedimientos paso a paso para simular, probar y docume
      ```
    * **Resultado Esperado:** El stock de `Paracetamol 500mg` (INS-001) habrá bajado de 500 a 499 unidades.
 
-### 📸 Qué Documentar en el Informe:
+### Qué Documentar en el Informe:
 *   **Texto de Consola (SQL):** Copiar la consulta SQL de `cola_contingencia` con el registro pendiente.
 *   **Logs del Middleware (VM3):** Copiar las líneas de log que digan:
     *   `[MIDDLEWARE_ERROR] Error al notificar a bodega ... Encolando consumo.`
