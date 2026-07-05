@@ -2,28 +2,33 @@
 # ==============================================================================
 # Script de Reconstrucción de Infraestructura en GCP - Proyecto 3 OSDS
 # ==============================================================================
-# Este script contiene todos los comandos gcloud y bash necesarios para crear
-# las 3 VMs en Google Cloud Platform, instalar Docker/Compose, clonar el
-# repositorio con la nueva rama unificada, y levantar los contenedores.
+# Este script recrea las 3 VMs en GCP, instala Docker/Compose en cada una,
+# clona la rama parte3/general y levanta los servicios correspondientes a la
+# arquitectura multi-base de datos con tolerancia a fallos.
 #
-# Ejecutar este script desde Google Cloud Shell.
+# Ejecutar este script desde GCP Cloud Shell.
 # ==============================================================================
 
 ZONE="us-central1-a"
-MACHINE_TYPE="e2-micro" # Tipo de máquina micro (2 vCPU, 1 GB RAM) - Apto para Free Tier de GCP
 IMAGE_FAMILY="ubuntu-2204-lts"
 IMAGE_PROJECT="ubuntu-os-cloud"
-DISK_SIZE="10GB"        # Tamaño mínimo de disco estándar de Ubuntu
+DISK_SIZE="10GB"
 
 # ------------------------------------------------------------------------------
-# 1. CREACIÓN DE LAS MÁQUINAS VIRTUALES CON IPs PRIVADAS ESTÁTICAS
+# 1. ELIMINACIÓN DE VMs ANTERIORES (SI EXISTEN)
+# ------------------------------------------------------------------------------
+echo "🗑️ Eliminando VMs existentes si las hay..."
+gcloud compute instances delete vm-hospital-local vm-nube-central vm-gateway --zone=$ZONE --quiet 2>/dev/null || true
+
+# ------------------------------------------------------------------------------
+# 2. CREACIÓN DE LAS MÁQUINAS VIRTUALES
 # ------------------------------------------------------------------------------
 echo "🚀 Creando Máquinas Virtuales en GCP..."
 
-# VM 1: Hospital Local (IP: 10.128.0.10)
+# VM 1: Hospital Local (MariaDB) - e2-micro es suficiente
 gcloud compute instances create vm-hospital-local \
     --zone=$ZONE \
-    --machine-type=$MACHINE_TYPE \
+    --machine-type=e2-micro \
     --private-network-ip=10.128.0.10 \
     --image-family=$IMAGE_FAMILY \
     --image-project=$IMAGE_PROJECT \
@@ -37,10 +42,10 @@ gcloud compute instances create vm-hospital-local \
     sudo ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
     '
 
-# VM 2: Nube Central (IP: 10.128.0.20)
+# VM 2: Nube Central (PostgreSQL en Python) - e2-micro
 gcloud compute instances create vm-nube-central \
     --zone=$ZONE \
-    --machine-type=$MACHINE_TYPE \
+    --machine-type=e2-micro \
     --private-network-ip=10.128.0.20 \
     --image-family=$IMAGE_FAMILY \
     --image-project=$IMAGE_PROJECT \
@@ -54,10 +59,10 @@ gcloud compute instances create vm-nube-central \
     sudo ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
     '
 
-# VM 3: Gateway de Seguridad (IP: 10.128.0.30)
+# VM 3: Gateway & Central Services - Requiere e2-medium (4 GB RAM) por carga de contenedores y bases MySQL
 gcloud compute instances create vm-gateway \
     --zone=$ZONE \
-    --machine-type=$MACHINE_TYPE \
+    --machine-type=e2-medium \
     --private-network-ip=10.128.0.30 \
     --image-family=$IMAGE_FAMILY \
     --image-project=$IMAGE_PROJECT \
@@ -71,65 +76,45 @@ gcloud compute instances create vm-gateway \
     sudo ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
     '
 
-echo "⏳ Esperando 30 segundos a que las VMs terminen de inicializarse e instalar Docker..."
-sleep 30
+echo "⏳ Esperando 45 segundos a que las VMs completen su inicialización e instalación de Docker..."
+sleep 45
 
 # ------------------------------------------------------------------------------
-# 2. CONFIGURACIÓN DEL CÓDIGO E INICIALIZACIÓN EN CADA VM
+# 3. DESPLIEGUE DEL REPOSITORIO Y SERVICIOS
 # ------------------------------------------------------------------------------
-echo "⚙️ Clonando repositorio y configurando servicios..."
+echo "⚙️ Configurando servicios en cada una de las VMs..."
 
-# Define tu URL de repositorio Git
-REPO_URL="https://github.com/maruzs/Proyecto-OSDS.git" # Ajustar si es necesario
 BRANCH="parte3/general"
+REPO="https://github.com/maruzs/Proyecto-OSDS.git"
 
-# Configurar VM 1 (Hospital Local)
+# Desplegar VM 1 (Hospital Local)
 gcloud compute ssh vm-hospital-local --zone=$ZONE --command="
   sudo rm -rf ~/Proyecto-OSDS
-  git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
-  cd ~/Proyecto-OSDS
-  git checkout $BRANCH
+  git clone $REPO ~/Proyecto-OSDS
+  cd ~/Proyecto-OSDS && git checkout $BRANCH
   cd vms/vm1-hospital
-  sudo docker rm -f app-estaciones db-local 2>/dev/null || true
-  sudo docker compose down --remove-orphans 2>/dev/null || true
-  sudo docker compose up --build -d
-  sleep 5
-  sudo docker exec -i db-local psql -U postgres -d clinica -c 'ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;'
-"
-
-# Configurar VM 2 (Nube Central)
-gcloud compute ssh vm-nube-central --zone=$ZONE --command="
-  sudo rm -rf ~/Proyecto-OSDS
-  git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
-  cd ~/Proyecto-OSDS
-  git checkout $BRANCH
-  cd vms/vm2-nube
-  sudo docker rm -f app-terminales db-nube 2>/dev/null || true
-  sudo docker compose down --remove-orphans 2>/dev/null || true
-  sudo docker compose up --build -d
-  sleep 5
-  sudo docker exec -i db-nube psql -U postgres -d clinica -c 'ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;'
-"
-
-# Configurar VM 3 (Gateway)
-gcloud compute ssh vm-gateway --zone=$ZONE --command="
-  sudo rm -rf ~/Proyecto-OSDS
-  git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
-  cd ~/Proyecto-OSDS
-  git checkout $BRANCH
-  cd vms/vm3-gateway
-  sudo docker rm -f nginx-proxy cloudflare-tunnel 2>/dev/null || true
-  sudo docker compose down --remove-orphans 2>/dev/null || true
   sudo docker compose up -d
 "
 
-echo "🔗 Configurando la replicación lógica bidireccional..."
-# Crear suscripción en VM2 (Nube Central) conectando a la VM1
-gcloud compute ssh vm-nube-central --zone=$ZONE --command="sudo docker exec -i db-nube psql -U postgres -d clinica -c \"CREATE SUBSCRIPTION sub_desde_local CONNECTION 'host=db-local port=5432 dbname=clinica user=postgres password=postgres_secure_pass' PUBLICATION pub_local_a_nube WITH (copy_data = false);\""
+# Desplegar VM 2 (Nube Central)
+gcloud compute ssh vm-nube-central --zone=$ZONE --command="
+  sudo rm -rf ~/Proyecto-OSDS
+  git clone $REPO ~/Proyecto-OSDS
+  cd ~/Proyecto-OSDS && git checkout $BRANCH
+  cd vms/vm2-nube
+  sudo docker compose up -d
+"
 
-# Crear suscripción en VM1 (Hospital Local) conectando a la VM2
-gcloud compute ssh vm-hospital-local --zone=$ZONE --command="sudo docker exec -i db-local psql -U postgres -d clinica -c \"CREATE SUBSCRIPTION sub_desde_nube CONNECTION 'host=db-nube port=5432 dbname=clinica user=postgres password=postgres_secure_pass' PUBLICATION pub_nube_a_local WITH (copy_data = false);\""
+# Desplegar VM 3 (Gateway / Middleware)
+# Nota: Escribe el token por defecto provisto por el usuario
+TOKEN="eyJhIjoiZjFhOTc0NWIzMDA1OTZjMjY2OTE0YzE2NDJlNDIwNDAiLCJ0IjoiN2I5YTQ1YzktMTBlMS00YjQ5LWIxMDctNjNjZTc3OTBiOTNhIiwicyI6Ik1HSTRPRFJtWkRVdE0yWmlZaTAwWkRkbExUZzBOalF0WkROaVpUYzFZMkZpTmpGbCJ9"
+gcloud compute ssh vm-gateway --zone=$ZONE --command="
+  sudo rm -rf ~/Proyecto-OSDS
+  git clone $REPO ~/Proyecto-OSDS
+  cd ~/Proyecto-OSDS && git checkout $BRANCH
+  echo 'TUNNEL_TOKEN=$TOKEN' > ~/Proyecto-OSDS/vms/vm3-gateway/.env
+  cd vms/vm3-gateway
+  sudo docker compose up -d
+"
 
-echo "✅ Infraestructura desplegada exitosamente."
-echo "🔗 Recuerda configurar la replicación lógica bidireccional una vez que todo esté activo."
-
+echo "✅ Sistema recreado y desplegado exitosamente en su totalidad."
