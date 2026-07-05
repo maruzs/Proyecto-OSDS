@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  db-local:
+    image: postgres:16-alpine
+    container_name: db-local
+    restart: always
+    environment:
+      POSTGRES_DB: clinica
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass
+    volumes:
+      - db_local_data:/var/lib/postgresql/data
+      - ./config/db/init-local.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+    extra_hosts:
+      - "db-nube:10.128.0.20"
+    networks:
+      - hospital_net
+      - dmz_net
+
+  app-estaciones:
+    build: ./apps/estaciones-medicas
+    container_name: app-estaciones
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      - DB_HOST=db-local
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - hospital_net
+    depends_on:
+      - db-local
+
+networks:
+  hospital_net:
+    driver: bridge
+    name: hospital_net
+  dmz_net:
+    driver: bridge
+    name: dmz_net
+
+volumes:
+  db_local_data:
+    name: db_local_data

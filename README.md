@@ -1,38 +1,35 @@
-# Nodo Gateway (VM 3) - Proyecto OSDS
+# Centro de Salud Digital - Proyecto 3 (Sistemas Distribuidos)
 
-Este nodo de la infraestructura distribuida corresponde al **Gateway (VM 3)** de la simulación de centro de salud.
-
-## ⚙️ Componentes Locales (VM 3)
-*   **`nginx-proxy`**: Servidor Nginx que actúa como proxy inverso y balanceador de WebSockets, gestionando la encriptación y ruteando las peticiones a la VM1 y VM2.
-*   **`cloudflare-tunnel`**: Cliente de Cloudflare que establece un túnel seguro con SSL/TLS legítimo para el subdominio `osdsp3.epistia.cl` sin exponer puertos del host al exterior.
+Este repositorio ha sido unificado y organizado como un **Monorepo** bajo la rama `parte3/general` para simplificar la gestión del código, el desarrollo local y el despliegue distribuido en Google Cloud Platform (GCP).
 
 ---
 
-## 🚀 Guía de Despliegue Global en GCP con GCloud
+## 📁 Estructura del Monorepo
 
-Ejecuta esta secuencia completa de comandos directamente desde la terminal de **Google Cloud Shell** para iniciar las VMs y desplegar todo el entorno distribuido:
+*   **`vms/`**: Contiene la configuración y el código correspondiente a cada Máquina Virtual.
+    *   **`vm1-hospital/`**: Servidores de aplicación (`app-estaciones`) y base de datos local (`db-local` en MariaDB).
+    *   **`vm2-nube/`**: Módulo administrativo (`app-terminales`) y base de datos central (`db-nube` en PostgreSQL).
+    *   **`vm3-gateway/`**: Proxy inverso (`nginx-proxy`), Frontend de simulación y el cliente de túnel seguro (`cloudflare-tunnel`).
+*   **`diagrama/`**: Recursos y código de los diagramas de arquitectura.
+*   **`scripts/`**: Scripts de automatización y recreación de infraestructura.
+*   **`informe.tex`**: Documento de reporte del proyecto en formato LaTeX.
 
-### 1. Encender las Máquinas Virtuales en GCP
+---
+
+## 🚀 Guía de Despliegue en GCP (Google Cloud Shell)
+
+Hemos creado un script automatizado para reconstruir todas las VMs e instalar Docker y configurar el código directamente.
+
+### 1. Reconstruir e Inicializar las VMs en GCP
+Ejecuta el script de reconstrucción desde tu terminal de **Google Cloud Shell**:
 ```bash
-gcloud compute instances start vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
+./scripts/rebuild-gcp-vms.sh
 ```
+*Este script creará las VMs `vm-hospital-local`, `vm-nube-central`, y `vm-gateway`, instalará Docker/Docker Compose en cada una, clonará este repositorio en la rama `parte3/general` y levantará los servicios iniciales.*
 
-### 2. Desplegar VM 1 (Hospital Local)
-```bash
-gcloud compute ssh vm-hospital-local --zone=us-central1-a --command="cd ~/Proyecto-OSDS && git fetch origin && git checkout VM1 && git pull origin VM1 && sudo docker rm -f nginx-proxy cloudflare-tunnel app-terminales app-estaciones db-local db-nube 2>/dev/null; sudo docker-compose up --build -d --remove-orphans && sleep 5 && sudo docker exec -it db-local psql -U postgres -d clinica -c 'ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;'"
-```
+### 2. Configurar la Replicación Lógica Bidireccional
+Una vez que los contenedores estén corriendo en las VMs, ejecuta los siguientes comandos en Cloud Shell para establecer las suscripciones de replicación:
 
-### 3. Desplegar VM 2 (Nube Central)
-```bash
-gcloud compute ssh vm-nube-central --zone=us-central1-a --command="cd ~/Proyecto-OSDS && git fetch origin && git checkout VM2 && git pull origin VM2 && sudo docker rm -f nginx-proxy cloudflare-tunnel app-terminales app-estaciones db-local db-nube 2>/dev/null; sudo docker-compose up --build -d --remove-orphans && sleep 5 && sudo docker exec -it db-nube psql -U postgres -d clinica -c 'ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;'"
-```
-
-### 4. Desplegar VM 3 (Gateway - Reemplazar TU_TUNNEL_TOKEN con tu token de Cloudflare)
-```bash
-gcloud compute ssh vm-gateway --zone=us-central1-a --command="cd ~/Proyecto-OSDS && git fetch origin && git checkout VM3 && git pull origin VM3 && echo 'TUNNEL_TOKEN=TU_TUNNEL_TOKEN' > .env && sudo docker rm -f nginx-proxy cloudflare-tunnel app-terminales app-estaciones db-local db-nube 2>/dev/null; sudo docker-compose up -d --remove-orphans"
-```
-
-### 5. Configurar Replicación Lógica Bidireccional (Una vez levantados los servicios)
 ```bash
 # Crear suscripción en VM2 (Nube Central) conectando a la VM1
 gcloud compute ssh vm-nube-central --zone=us-central1-a --command="sudo docker exec -it db-nube psql -U postgres -d clinica -c \"CREATE SUBSCRIPTION sub_desde_local CONNECTION 'host=db-local port=5432 dbname=clinica user=postgres password=postgres_secure_pass' PUBLICATION pub_local_a_nube WITH (copy_data = false);\""
@@ -41,7 +38,21 @@ gcloud compute ssh vm-nube-central --zone=us-central1-a --command="sudo docker e
 gcloud compute ssh vm-hospital-local --zone=us-central1-a --command="sudo docker exec -it db-local psql -U postgres -d clinica -c \"CREATE SUBSCRIPTION sub_desde_nube CONNECTION 'host=db-nube port=5432 dbname=clinica user=postgres password=postgres_secure_pass' PUBLICATION pub_nube_a_local WITH (copy_data = false);\""
 ```
 
-### 6. Apagar las Máquinas Virtuales (Cuando termines las pruebas)
+---
+
+## ⚙️ Control de Infraestructura (Comandos Útiles)
+
+### Iniciar las VMs
+```bash
+gcloud compute instances start vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
+```
+
+### Detener las VMs (Apagado para ahorrar créditos)
 ```bash
 gcloud compute instances stop vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
 ```
+
+### Acceso SSH a una VM específica
+*   **Hospital Local:** `gcloud compute ssh vm-hospital-local --zone=us-central1-a`
+*   **Nube Central:** `gcloud compute ssh vm-nube-central --zone=us-central1-a`
+*   **Gateway:** `gcloud compute ssh vm-gateway --zone=us-central1-a`

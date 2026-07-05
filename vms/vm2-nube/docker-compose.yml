@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  db-nube:
+    image: postgres:16-alpine
+    container_name: db-nube
+    restart: always
+    environment:
+      POSTGRES_DB: clinica
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass
+    volumes:
+      - db_cloud_data:/var/lib/postgresql/data
+      - ./config/db/init-nube.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+    extra_hosts:
+      - "db-local:10.128.0.10"
+    networks:
+      - cloud_net
+      - dmz_net
+
+  app-terminales:
+    build: ./apps/terminales-administrativas
+    container_name: app-terminales
+    restart: always
+    ports:
+      - "8002:8002"
+    environment:
+      - DB_HOST=db-nube
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - cloud_net
+    depends_on:
+      - db-nube
+
+networks:
+  cloud_net:
+    driver: bridge
+    name: cloud_net
+  dmz_net:
+    driver: bridge
+    name: dmz_net
+
+volumes:
+  db_cloud_data:
+    name: db_cloud_data

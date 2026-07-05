@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   nginx-proxy:
+    # NPM conectado con cloudflared
     image: nginx:alpine
     container_name: nginx-proxy
     restart: always
@@ -14,11 +15,12 @@ services:
     networks:
       - hospital_net
       - cloud_net
-      - dmz_net
+      - dmz_net # Red que conecta el tunel con el NPM
 
   tunnel:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflare-tunnel
+    # Todo el trafico entra por Cloudflare que ya tiene medidas de seguridad y luego lo redirige al nginx-proxy:80
+    image: cloudflare/cloudflared:latest # Para no abrir puertos Ingress y reducir la superficie de ataque
+    container_name: cloudflare-tunnel # abriendo un canal de salida cifrado hacia la red global de Cloudflare
     restart: always
     command: tunnel run
     environment:
