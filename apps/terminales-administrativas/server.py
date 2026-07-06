@@ -28,7 +28,7 @@ async def init_db():
     print("[SISTEMA] Conexión establecida con db-nube-proxy.")
 
 @sio.event
-async def connect(sid, environ):
+async def connect(sid, environ, auth):
     print(f"[CONEXIÓN] Cliente conectado (nube). ID Socket: {sid}")
 
 @sio.event
