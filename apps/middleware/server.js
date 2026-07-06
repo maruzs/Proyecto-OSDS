@@ -25,7 +25,7 @@ const mysqlConfig = {
 const BODEGA_APP_URL = process.env.BODEGA_APP_URL || 'http://app-bodega:8003';
 
 // ------------------------------------------------------------------------------
-# Base de datos SQLite de contingencia (Local en VM3)
+// Base de datos SQLite de contingencia (Local en VM3)
 // ------------------------------------------------------------------------------
 const dbPath = path.join(__dirname, 'contingencia.db');
 const contingenciaDb = new sqlite3.Database(dbPath, (err) => {
@@ -62,7 +62,7 @@ function encolarContingencia(tipo, payload) {
 }
 
 // ------------------------------------------------------------------------------
-# Endpoints del Middleware
+// Endpoints del Middleware
 // ------------------------------------------------------------------------------
 
 // 1. Registro de Pacientes (Consolidación desde App 2)
@@ -163,10 +163,10 @@ app.post('/api/mw/diagnosticos', async (req, res) => {
 });
 
 // ------------------------------------------------------------------------------
-# Hilo Sincronizador de Contingencia (Corre cada 10 segundos)
+// Hilo Sincronizador de Contingencia (Corre cada 10 segundos)
 // ------------------------------------------------------------------------------
 async function procesarColaContingencia() {
-    contingenciaDb.all('SELECT * FROM cola_contingencia ORDER BY id ASC LIMIT 5', async (err, rows) => {
+    contingenciaDb.all('SELECT * FROM cola_contingencia WHERE intentos < 10 ORDER BY id ASC LIMIT 5', async (err, rows) => {
         if (err || !rows || rows.length === 0) return;
 
         console.log(`[SINCRONIZADOR] Procesando ${rows.length} elementos pendientes en cola de contingencia...`);
