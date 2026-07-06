@@ -5,6 +5,7 @@ const mysql = require('mysql2/promise');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
+app.use(express.json());
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -105,6 +106,30 @@ io.on('connection', (socket) => {
     socket.on('disconnect', (reason) => {
         console.log(`[DESCONEXIÓN] Cliente desconectado. ID Socket: ${socket.id}. Motivo: ${reason}`);
     });
+});
+
+// Endpoint HTTP para recibir sincronización de admisiones desde el Middleware (VM3)
+app.post('/api/pacientes/sincronizar', async (req, res) => {
+    const { id, rut, nombre, diagnostico, origen_registro } = req.body;
+    console.log(`[SYNC] Solicitud de sincronización recibida del Middleware. RUT: ${rut}`);
+
+    if (!id || !rut || !nombre) {
+        return res.status(400).json({ error: 'Campos id, rut y nombre son requeridos.' });
+    }
+
+    try {
+        await pool.query(
+            `INSERT INTO fichas_pacientes (id, rut, nombre, diagnostico, origen_registro)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), diagnostico = VALUES(diagnostico)`,
+            [id, rut, nombre, diagnostico || 'Ingreso Administrativo / En espera de atencion', origen_registro || 'nube']
+        );
+        console.log(`[SYNC] Paciente ${rut} sincronizado correctamente en MariaDB local.`);
+        res.json({ status: 'OK', message: 'Paciente sincronizado en base de datos local.' });
+    } catch (err) {
+        console.error(`[SYNC_ERROR] Error al sincronizar paciente ${rut}:`, err.message);
+        res.status(500).json({ status: 'ERROR', message: err.message });
+    }
 });
 
 server.listen(PORT, () => {
