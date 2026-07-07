@@ -220,12 +220,12 @@ async function procesarColaContingencia() {
                 try {
                     if (row.tipo === 'ADMITIR_PACIENTE') {
                         await client.query(
-                            'INSERT INTO registro_admisiones (id, rut, nombre, origen) VALUES ($1, $2, $3, $4)',
+                            'INSERT INTO registro_admisiones (id, rut, nombre, origen) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
                             [payload.id, payload.rut, payload.nombre, payload.origen]
                         );
                     } else if (row.tipo === 'GUARDAR_DIAGNOSTICO') {
                         await client.query(
-                            'INSERT INTO auditoria_diagnosticos (id, rut, diagnostico, origen) VALUES ($1, $2, $3, $4)',
+                            'INSERT INTO auditoria_diagnosticos (id, rut, diagnostico, origen) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
                             [payload.id, payload.rut, payload.diagnostico, payload.origen]
                         );
                     } else if (row.tipo === 'DESCONTAR_BODEGA') {
