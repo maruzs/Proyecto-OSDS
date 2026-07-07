@@ -22,6 +22,7 @@
 \usepackage{enumitem}
 \usepackage{tcolorbox}
 \tcbuselibrary{skins, breakable}
+\usepackage{float}
 
 % ── Colores formales ─────────────────────────────────────────────────────────
 \definecolor{navy}{RGB}{26, 54, 93}
@@ -408,127 +409,198 @@ lo que garantiza que un fallo del nodo primario no interrumpa la disponibilidad 
 \section{Pruebas de Tolerancia a Fallos — Resultados}
 % =============================================================================
 
-\subsection{Prueba 1 — Pérdida de conectividad con servidor de aplicación principal}
+\subsection{Prueba 1: Caída del Servidor de Aplicación Principal}
 
-\textbf{Objetivo:} Verificar que al detener la aplicación principal, el sistema
-redirige automáticamente el tráfico hacia la réplica sin interrupción perceptible
-para el usuario.
+\textbf{Objetivo:} Demostrar que el Gateway (Nginx) detecta la caída de un servidor de aplicación principal (VM2) y redirige automáticamente el tráfico hacia su réplica sin interrumpir el servicio al usuario.
 
-\textbf{Procedimiento:}
-\begin{lstlisting}[language=bash, caption=Comando ejecutado para simular la caída de App 2]
-gcloud compute ssh vm-nube-central --zone=us-central1-a \
-  --command="sudo docker stop app-terminales"
-\end{lstlisting}
+\textbf{Estado inicial}
 
-\begin{okbox}[Resultado: EXITOSO]
-La interfaz web registró un nuevo paciente (RUT \texttt{11111111-1}, ``Paciente Failover App'')
-con éxito mientras \texttt{app-terminales} estaba detenido. La conexión WebSocket se
-redirigió automáticamente hacia \texttt{app-terminales-replica} a través de Nginx
-en menos de 5 segundos, sin requerir recarga del navegador.
-\end{okbox}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 024348.png}
+    \caption{Estado inicial de los contenedores en vm-nube-central: \texttt{app-terminales} y \texttt{app-terminales-replica} activos.}
+\end{figure}
 
-\textbf{Logs de Nginx (VM3) evidenciando el desvío de tráfico:}
-\begin{lstlisting}[language=bash, caption=Extracto de logs de nginx-proxy durante el failover]
-2026/07/05 20:15:32 [warn] 1#1: *4 connect() failed (111: Connection refused)
-while connecting to upstream, client: 10.0.0.1, server: _,
-request: "GET /ws-administrativas/socket.io/ HTTP/1.1",
-upstream: "http://10.128.0.20:8002/"
-2026/07/05 20:15:32 [info] upstream: trying backup: 10.128.0.20:8012
-2026/07/05 20:15:32 [info] *4 upstream "http://10.128.0.20:8012/" connected
-\end{lstlisting}
+\textbf{Acción de falla}
+\begin{verbatim}
+sudo docker stop app-terminales
+\end{verbatim}
 
-\textbf{Estado de contenedores (VM2) durante la prueba:}
-\begin{lstlisting}[language=bash, caption=Salida de docker ps en VM2 durante el failover]
-CONTAINER ID   NAME                       STATUS
-a1b2c3d4e5f6   app-terminales             Exited (137) 2 minutes ago
-b2c3d4e5f6a7   app-terminales-replica     Up 15 minutes
-c3d4e5f6a7b8   db-nube-proxy              Up 15 minutes
-\end{lstlisting}
+\textbf{Comportamiento observado}
 
-% --------------------------------------------------------------------------
-\subsection{Prueba 2 — Interrupción del servicio de base de datos}
+Se intentó admitir un paciente nuevo (``Maria Loyola'', RUT 11111111-1) sin recargar la página. El registro se completó con éxito.
 
-\textbf{Objetivo:} Verificar que al apagarse el nodo maestro de MariaDB,
-HAProxy detecta el fallo y redirige las consultas a la base réplica, manteniendo
-la disponibilidad de datos de forma transparente.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 020906.png}
+    \caption{Panel de red (F12) mostrando la reconexión WebSocket y el paciente registrado exitosamente pese a la caída.}
+\end{figure}
 
-\textbf{Procedimiento:}
-\begin{lstlisting}[language=bash, caption=Comando para simular la caída del Maestro MariaDB]
-gcloud compute ssh vm-hospital-local --zone=us-central1-a \
-  --command="sudo docker stop db-local-master"
-\end{lstlisting}
+\textbf{Evidencia técnica --- Logs de Nginx (vm-gateway)}
 
-\begin{okbox}[Resultado: EXITOSO]
-Con el rol Médico, se buscó el paciente con RUT \texttt{12345678-9} (``Juan Perez'').
-La aplicación respondió de forma normal, cargando la ficha clínica directamente
-desde \texttt{db-local-replica}, enrutado transparentemente por \texttt{db-local-proxy}.
-La integridad y consistencia de datos fue verificada comparando el registro
-con la última transacción confirmada antes de la caída.
-\end{okbox}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 022631.png}
+    \caption{Log de Nginx evidenciando la conexión rechazada al upstream principal seguida de una respuesta exitosa (200) al redirigir a la réplica.}
+\end{figure}
 
-\textbf{Logs de HAProxy (VM1) evidenciando la conmutación:}
-\begin{lstlisting}[language=bash, caption=Logs de HAProxy detectando la caída del maestro y activando la réplica]
-[WARNING]  172/201532 (1) : Server mariadb_backend/db-master is DOWN.
-             1 active and 1 backup servers left. 0 sessions active.
-[NOTICE]   172/201532 (1) : Server mariadb_backend/db-replica is now UP.
-             1 active and 0 backup servers left.
-\end{lstlisting}
+El log evidencia que Nginx detectó la caída del upstream principal (conexión rechazada) y, en la misma solicitud, entregó una respuesta exitosa (200) al redirigir el tráfico hacia la réplica.
 
-% --------------------------------------------------------------------------
-\subsection{Prueba 3 — Caída del Middleware y recuperación asíncrona}
+\textbf{Estado tras la falla}
 
-\textbf{Objetivo:} Verificar que cuando el Middleware no puede contactar a la
-App de Bodega, almacena la transacción en la cola SQLite local y la sincroniza
-automáticamente al restablecerse el servicio.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 022206.png}
+    \caption{\texttt{app-terminales} en estado \texttt{Exited (137)} mientras \texttt{app-terminales-replica} permanece activo.}
+\end{figure}
 
-\textbf{Procedimiento:}
-\begin{lstlisting}[language=bash, caption=Simulación de caída de la App de Bodega (VM3)]
-gcloud compute ssh vm-gateway --zone=us-central1-a \
-  --command="sudo docker stop app-bodega"
-\end{lstlisting}
+\textbf{Restauración}
+\begin{verbatim}
+sudo docker start app-terminales
+\end{verbatim}
 
-Se actualizó el diagnóstico de un paciente con: \\
-\texttt{"Paciente requiere tratamiento con Paracetamol 500mg"} \\
-El diagnóstico se guardó en MariaDB sin errores para el médico.
+\textbf{Conclusión:} Nginx redirige automáticamente el tráfico hacia la réplica de aplicación ante la caída del servidor principal, sin interrupción perceptible para el usuario.
 
-\textbf{Verificación de la cola SQLite (durante la caída):}
-\begin{lstlisting}[language=SQL, caption=Consulta a la tabla cola\_contingencia con registro pendiente]
-sqlite> SELECT * FROM cola_contingencia;
-id | tipo             | payload                              | intentos | fecha_registro
-1  | DESCONTAR_BODEGA | {"codigo":"INS-001","cantidad":1}    | 0        | 2026-07-05 20:22:11
-\end{lstlisting}
 
-\textbf{Logs del Middleware durante la caída:}
-\begin{lstlisting}[language=bash, caption=Logs del Middleware mostrando el encolamiento y sincronización]
-[MIDDLEWARE] Procesando diagnostico para RUT: 12345678-9
-[MIDDLEWARE] Receta identificada: Paracetamol 500mg. Solicitando descuento...
-[MIDDLEWARE_ERROR] Error al notificar a bodega: connect ECONNREFUSED.
-                   Encolando consumo.
-[SQLITE] Sincronizacion diferida encolada. ID: 1
-[SINCRONIZADOR] Procesando 1 elementos pendientes en cola de contingencia...
-[SINCRONIZADOR] Sincronizando elemento ID 1 de tipo DESCONTAR_BODEGA
-[SINCRONIZADOR] Elemento ID 1 sincronizado y eliminado de la cola.
-\end{lstlisting}
 
-\begin{okbox}[Resultado: EXITOSO]
-Tras reiniciar la App de Bodega, el worker de sincronización procesó automáticamente
-el elemento pendiente dentro de los 10 segundos siguientes. La tabla SQLite quedó vacía
-y el stock de ``Paracetamol 500mg'' (INS-001) en MySQL disminuyó de 500 a 499 unidades,
-confirmando la integridad de la transacción diferida.
-\end{okbox}
+\subsection{Prueba 2: Interrupción de la Base de Datos Principal}
 
-\textbf{Inventario final (MySQL Central tras la sincronización):}
-\begin{lstlisting}[language=SQL, caption=Stock de insumos en MySQL Central tras la sincronización]
-SELECT codigo, nombre, stock FROM clinica_central.inventario_insumos;
+\textbf{Objetivo:} Demostrar que ante la caída del motor de base de datos maestro (VM1), HAProxy redirige las consultas hacia la réplica de forma transparente para la aplicación.
 
-+---------+-----------------+-------+
-| codigo  | nombre          | stock |
-+---------+-----------------+-------+
-| INS-001 | Paracetamol 500 |   499 |  <- Descontado correctamente
-| INS-002 | Ibuprofeno 600  |   300 |
-| INS-003 | Enalapril 10mg  |   150 |
-+---------+-----------------+-------+
-\end{lstlisting}
+\textbf{Estado inicial}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 142238.png}
+    \caption{Estado inicial de los contenedores en vm-hospital-local: \texttt{db-local-master} activo y en estado \texttt{healthy}.}
+\end{figure}
+
+\textbf{Acción de falla}
+\begin{verbatim}
+sudo docker stop db-local-master
+\end{verbatim}
+
+\textbf{Comportamiento observado}
+
+Consulta del paciente Maria Loyola (RUT 11111111-1) desde el rol Médico. Antes de la falla, la ficha clínica cargaba con normalidad; tras detener el maestro, se repitió la consulta sin reiniciar sesión y la ficha volvió a cargar correctamente.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 120613.png}
+    \caption{Ficha clínica de Maria Loyola cargada correctamente antes de la falla.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 121353.png}
+    \caption{Ficha clínica de Maria Loyola cargando correctamente con el maestro de base de datos caído.}
+\end{figure}
+
+\textbf{Evidencia técnica --- Logs de HAProxy (vm-hospital-local)}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 142929.png}
+    \caption{Log de HAProxy evidenciando la detección de la caída del servidor maestro (timeout de 3002\,ms) y la transferencia automática del tráfico al servidor de respaldo (réplica).}
+\end{figure}
+
+{\footnotesize
+\begin{verbatim}
+[WARNING] Server mariadb_back/db-master is DOWN, reason: Layer4 timeout,
+check duration: 3002ms. Running on backup.
+Connect from 172.20.0.3:46582 to 172.20.0.6:3306 (mariadb_front/TCP)
+\end{verbatim}
+}
+
+El log confirma que HAProxy detectó la caída del maestro mediante su chequeo de salud (timeout de 3002\,ms), transfirió el tráfico al servidor de respaldo (\texttt{Running on backup}) y registró una nueva conexión enrutada exitosamente tras el failover.
+
+\textbf{Estado tras la falla}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 143156.png}
+    \caption{\texttt{db-local-master} detenido mientras \texttt{db-local-replica} asume el tráfico como respaldo.}
+\end{figure}
+
+\textbf{Restauración}
+\begin{verbatim}
+sudo docker start db-local-master
+\end{verbatim}
+
+\textbf{Conclusión:} HAProxy detecta la caída del maestro de base de datos y redirige las consultas a la réplica de forma transparente, sin afectar la disponibilidad de la información clínica.
+
+
+
+\subsection{Prueba 3: Caída del Middleware y Recuperación Asíncrona (Cola de Contingencia)}
+
+\textbf{Objetivo:} Demostrar que si el middleware no puede comunicarse con la aplicación de Bodega, encola la transacción localmente en SQLite y la sincroniza automáticamente cuando el servicio vuelve a estar disponible.
+
+\textbf{Estado inicial}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 013600.png}
+    \caption{Estado inicial de los contenedores en vm-gateway: \texttt{app-middleware}, \texttt{app-bodega} y \texttt{db-central-master} activos.}
+\end{figure}
+
+\textbf{Acción de falla}
+\begin{verbatim}
+sudo docker stop app-bodega
+\end{verbatim}
+
+\textbf{Comportamiento observado}
+
+Desde el rol Médico, se actualizó el diagnóstico del paciente agregando la receta ``Paciente requiere tratamiento con Paracetamol 500mg''. El sistema confirmó el guardado sin error visible en la interfaz.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 121353.png}
+    \caption{Confirmación de guardado del diagnóstico en la interfaz web pese a la caída de Bodega.}
+\end{figure}
+
+\textbf{Evidencia técnica --- Cola de contingencia y logs del Middleware}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 014143.png}
+    \caption{Consulta SQL mostrando el registro \texttt{DESCONTAR\_BODEGA} encolado en \texttt{contingencia.db}.}
+\end{figure}
+
+\begin{verbatim}
+[
+  { "id": 1, "tipo": "GUARDAR_DIAGNOSTICO", ... },
+  { "id": 2, "tipo": "DESCONTAR_BODEGA",
+    "payload": "{\"codigo\":\"INS-001\",\"cantidad\":1}",
+    "intentos": 4 }
+]
+\end{verbatim}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 014344.png}
+    \caption{Log del middleware evidenciando el reintento fallido de notificación a Bodega y la posterior sincronización exitosa del elemento encolado.}
+\end{figure}
+
+
+
+La secuencia confirma que el middleware guardó la transacción en la cola de contingencia mientras Bodega estaba caída, reintentó sin éxito durante la falla, y la sincronizó exitosamente al restablecerse el servicio.
+
+\textbf{Restauración}
+\begin{verbatim}
+sudo docker start app-bodega
+\end{verbatim}
+
+\textbf{Verificación final --- Stock actualizado}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pruebasTolerancia/Captura de pantalla 2026-07-06 014406.png}
+    \caption{Consulta SQL mostrando el stock de Paracetamol 500mg descontado tras la sincronización.}
+\end{figure}
+
+
+
+\textbf{Conclusión:} El middleware garantiza la integridad de las transacciones mediante una cola de contingencia local, sincronizando automáticamente las operaciones pendientes una vez restablecida la comunicación con Bodega.
 
 % =============================================================================
 \section{SLA — Acuerdo de Nivel de Servicio}

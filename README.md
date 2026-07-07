@@ -70,5 +70,4 @@ Consulte **[pruebasTolerancia.md](docs/pruebasTolerancia.md)** para instruccione
 
 | Informe | Descripción |
 |---------|-------------|
-| [informe.tex](docs/report/informe.tex) | Informe Entrega 1 (30-06-2026) |
-| [**informeFinal.tex**](docs/report/informeFinal.tex) | **Informe Final Entrega 2 (07-07-2026)** — incluye SLA/SLO, pruebas y módulo Bodega |
+| [**informeFinal.tex**](docs/report/informeFinal.tex) | [**informeFinal.tex**](file:///c:/Users/Administrator/Desktop/Proyecto-OSDS/docs/report/informeFinal.tex) — incluye SLA/SLO, pruebas y módulo Bodega |

@@ -11,6 +11,8 @@ app.use(express.json());
 
 const PORT = 8000;
 
+const HOSPITAL_APP_URL = process.env.HOSPITAL_APP_URL || 'http://10.128.0.10:8001';
+
 // Configuración de MySQL Central (a través del proxy)
 const mysqlConfig = {
     host: process.env.DB_CENTRAL_HOST || 'db-central-proxy',
@@ -25,7 +27,7 @@ const mysqlConfig = {
 const BODEGA_APP_URL = process.env.BODEGA_APP_URL || 'http://app-bodega:8003';
 
 // ------------------------------------------------------------------------------
-# Base de datos SQLite de contingencia (Local en VM3)
+// Base de datos SQLite de contingencia (Local en VM3)
 // ------------------------------------------------------------------------------
 const dbPath = path.join(__dirname, 'contingencia.db');
 const contingenciaDb = new sqlite3.Database(dbPath, (err) => {
@@ -62,19 +64,19 @@ function encolarContingencia(tipo, payload) {
 }
 
 // ------------------------------------------------------------------------------
-# Endpoints del Middleware
+// Endpoints del Middleware
 // ------------------------------------------------------------------------------
 
 // 1. Registro de Pacientes (Consolidación desde App 2)
 app.post('/api/mw/pacientes', async (req, res) => {
-    const { id, rut, nombre, origen_registro } = req.body;
+    const { id, rut, nombre, diagnostico, origen_registro } = req.body;
     console.log(`[MIDDLEWARE] Procesando admisión del paciente: ${nombre} (${rut})`);
 
     if (!id || !rut || !nombre) {
         return res.status(400).json({ error: 'Campos id, rut y nombre son requeridos.' });
     }
 
-    const payload = { id, rut, nombre, origen: origen_registro || 'desconocido' };
+    const payload = { id, rut, nombre, diagnostico, origen: origen_registro || 'desconocido' };
 
     let connection;
     try {
@@ -84,14 +86,25 @@ app.post('/api/mw/pacientes', async (req, res) => {
             [payload.id, payload.rut, payload.nombre, payload.origen]
         );
         console.log(`[MIDDLEWARE] Sincronización inmediata en DB Central (Paciente ID: ${id})`);
-        res.json({ status: 'OK', message: 'Paciente guardado en base de datos central.' });
     } catch (err) {
         console.error('[MIDDLEWARE_ERROR] Base de datos central no responde. Guardando en contingencia:', err.message);
         await encolarContingencia('ADMITIR_PACIENTE', payload);
-        res.json({ status: 'PENDING', message: 'Base central fuera de línea. Admisión registrada en cola de contingencia.' });
     } finally {
         if (connection) await connection.end();
     }
+
+    // Reenviar la admisión al Hospital Local (VM1) para que quede disponible en Estaciones Médicas
+    try {
+        await axios.post(`${HOSPITAL_APP_URL}/api/pacientes/sincronizar`, {
+            id, rut, nombre, diagnostico, origen_registro: origen_registro || 'nube'
+        });
+        console.log(`[MIDDLEWARE] Paciente ${rut} sincronizado con éxito en Hospital Local (VM1).`);
+    } catch (errHospital) {
+        console.error(`[MIDDLEWARE_ERROR] Error al sincronizar con Hospital Local: ${errHospital.message}. Encolando.`);
+        await encolarContingencia('SINCRONIZAR_HOSPITAL', payload);
+    }
+
+    res.json({ status: 'OK', message: 'Paciente procesado.' });
 });
 
 // 2. Registro de Diagnósticos y Consumo de Bodega (Desde App 1)
@@ -163,10 +176,10 @@ app.post('/api/mw/diagnosticos', async (req, res) => {
 });
 
 // ------------------------------------------------------------------------------
-# Hilo Sincronizador de Contingencia (Corre cada 10 segundos)
+// Hilo Sincronizador de Contingencia (Corre cada 10 segundos)
 // ------------------------------------------------------------------------------
 async function procesarColaContingencia() {
-    contingenciaDb.all('SELECT * FROM cola_contingencia ORDER BY id ASC LIMIT 5', async (err, rows) => {
+    contingenciaDb.all('SELECT * FROM cola_contingencia WHERE intentos < 10 ORDER BY id ASC LIMIT 5', async (err, rows) => {
         if (err || !rows || rows.length === 0) return;
 
         console.log(`[SINCRONIZADOR] Procesando ${rows.length} elementos pendientes en cola de contingencia...`);
@@ -195,6 +208,14 @@ async function procesarColaContingencia() {
                         await axios.post(`${BODEGA_APP_URL}/api/inventario/descontar`, {
                             codigo: payload.codigo,
                             cantidad: payload.cantidad
+                        });
+                    } else if (row.tipo === 'SINCRONIZAR_HOSPITAL') {
+                        await axios.post(`${HOSPITAL_APP_URL}/api/pacientes/sincronizar`, {
+                            id: payload.id,
+                            rut: payload.rut,
+                            nombre: payload.nombre,
+                            diagnostico: payload.diagnostico,
+                            origen_registro: payload.origen
                         });
                     }
 
