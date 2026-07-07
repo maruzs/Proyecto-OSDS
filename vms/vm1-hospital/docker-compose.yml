@@ -18,6 +18,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    extra_hosts:
+      - "db-nube:10.128.0.20"
     networks:
       - hospital_net
 
@@ -63,7 +65,7 @@ services:
       - dmz_net
 
   app-estaciones:
-    build: ../../apps/estaciones-medicas
+    image: app-estaciones-pg:latest
     container_name: app-estaciones
     restart: always
     ports:
@@ -80,7 +82,7 @@ services:
       - db-local-proxy
 
   app-estaciones-replica:
-    build: ../../apps/estaciones-medicas
+    image: app-estaciones-pg:latest
     container_name: app-estaciones-replica
     restart: always
     ports:
