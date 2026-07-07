@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const mysql = require('mysql2/promise');
+const { Client } = require('pg');
 
 const app = express();
 app.use(cors());
@@ -8,28 +8,29 @@ app.use(express.json());
 
 const PORT = 8003;
 
-// Configuración de MySQL Central (vía proxy HAProxy)
-const mysqlConfig = {
+// Configuración de PostgreSQL Central (vía proxy HAProxy)
+const pgConfig = {
     host: process.env.DB_CENTRAL_HOST || 'db-central-proxy',
-    port: parseInt(process.env.DB_CENTRAL_PORT || '3306'),
-    user: process.env.DB_CENTRAL_USER || 'clinica_user',
-    password: process.env.DB_CENTRAL_PASSWORD || 'clinica_secure_pass',
+    port: parseInt(process.env.DB_CENTRAL_PORT || '5432'),
+    user: process.env.DB_CENTRAL_USER || 'postgres',
+    password: process.env.DB_CENTRAL_PASSWORD || 'postgres_secure_pass',
     database: process.env.DB_CENTRAL_NAME || 'clinica_central',
-    connectTimeout: 5000
+    connectionTimeoutMillis: 5000
 };
 
 // Endpoint para obtener el stock de bodega
 app.get('/api/inventario', async (req, res) => {
-    let connection;
+    let client;
     try {
-        connection = await mysql.createConnection(mysqlConfig);
-        const [rows] = await connection.execute('SELECT * FROM inventario_insumos');
-        res.json({ status: 'OK', datos: rows });
+        client = new Client(pgConfig);
+        await client.connect();
+        const resDb = await client.query('SELECT * FROM inventario_insumos');
+        res.json({ status: 'OK', datos: resDb.rows });
     } catch (err) {
         console.error('[BODEGA_ERROR] Error obteniendo inventario:', err.message);
         res.status(500).json({ error: 'Base central fuera de línea.' });
     } finally {
-        if (connection) await connection.end();
+        if (client) await client.end();
     }
 });
 
@@ -42,22 +43,23 @@ app.post('/api/inventario/descontar', async (req, res) => {
         return res.status(400).json({ error: 'Campos codigo y cantidad son requeridos.' });
     }
 
-    let connection;
+    let client;
     try {
-        connection = await mysql.createConnection(mysqlConfig);
+        client = new Client(pgConfig);
+        await client.connect();
         
         // 1. Verificar si hay stock suficiente
-        const [rows] = await connection.execute(
-            'SELECT stock, nombre FROM inventario_insumos WHERE codigo = ?',
+        const resDb = await client.query(
+            'SELECT stock, nombre FROM inventario_insumos WHERE codigo = $1',
             [codigo]
         );
 
-        if (rows.length === 0) {
+        if (resDb.rows.length === 0) {
             return res.status(404).json({ error: 'Insumo no encontrado.' });
         }
 
-        const stockActual = rows[0].stock;
-        const nombreInsumo = rows[0].nombre;
+        const stockActual = resDb.rows[0].stock;
+        const nombreInsumo = resDb.rows[0].nombre;
 
         if (stockActual < cantidad) {
             console.warn(`[BODEGA_WARN] Stock insuficiente para ${nombreInsumo}. Solicitado: ${cantidad}, Disponible: ${stockActual}`);
@@ -65,8 +67,8 @@ app.post('/api/inventario/descontar', async (req, res) => {
         }
 
         // 2. Realizar el descuento
-        await connection.execute(
-            'UPDATE inventario_insumos SET stock = stock - ? WHERE codigo = ?',
+        await client.query(
+            'UPDATE inventario_insumos SET stock = stock - $1 WHERE codigo = $2',
             [cantidad, codigo]
         );
 
@@ -80,7 +82,7 @@ app.post('/api/inventario/descontar', async (req, res) => {
         console.error('[BODEGA_ERROR] Error de conexión con DB Central:', err.message);
         res.status(500).json({ error: 'Base central fuera de línea.' });
     } finally {
-        if (connection) await connection.end();
+        if (client) await client.end();
     }
 });
 
