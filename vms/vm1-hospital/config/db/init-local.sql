@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS fichas_pacientes (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE fichas_pacientes REPLICA IDENTITY FULL;
+
 -- Crear rol de replicación física para db-local-replica
 CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD 'repl_secure_pass';
 
