@@ -114,6 +114,24 @@ services:
       - cloud_net
       - hospital_net
 
+  db-contingencia:
+    image: postgres:16-alpine
+    container_name: db-contingencia
+    restart: always
+    environment:
+      POSTGRES_DB: contingencia
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass
+    volumes:
+      - db_contingencia_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d contingencia"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cloud_net
+
 networks:
   hospital_net:
     driver: bridge
@@ -130,3 +148,6 @@ volumes:
     name: db_central_master_data
   db_central_replica_data:
     name: db_central_replica_data
+  db_contingencia_data:
+    name: db_contingencia_data
+
