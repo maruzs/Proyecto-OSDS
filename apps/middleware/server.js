@@ -175,6 +175,16 @@ app.post('/api/mw/diagnosticos', async (req, res) => {
     }
 });
 
+// 3. Endpoint de estado y cola para el frontend
+app.get('/api/mw/status', (req, res) => {
+    contingenciaDb.get('SELECT COUNT(*) as count FROM cola_contingencia', (err, row) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        res.json({ status: 'OK', queueSize: row ? row.count : 0 });
+    });
+});
+
 // ------------------------------------------------------------------------------
 // Hilo Sincronizador de Contingencia (Corre cada 10 segundos)
 // ------------------------------------------------------------------------------

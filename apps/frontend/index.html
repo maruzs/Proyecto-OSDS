@@ -517,6 +517,10 @@
                         <span class="status-dot status-disconnected" id="dot-administrativas"></span>
                         <span>Terminales Adm. (Nube)</span>
                     </div>
+                    <div class="status-badge" id="status-queue" style="display: none;">
+                        <span class="status-dot status-connected" id="dot-queue" style="background-color: var(--color-success);"></span>
+                        <span>Cola Contingencia: <strong id="queue-count">0</strong></span>
+                    </div>
                 </div>
             </div>
         </header>
@@ -675,9 +679,16 @@
             // Configurar Vistas por Rol e inicializar Sockets
             inicializarVistasYSockets(rolActual);
 
-            // Cargar e iniciar actualización periódica del inventario de bodega
+            // Mostrar el status de la cola
+            document.getElementById('status-queue').style.display = 'flex';
+
+            // Cargar e iniciar actualización periódica del inventario de bodega y cola status
             cargarInventario();
-            inventarioInterval = setInterval(cargarInventario, 5000);
+            cargarColaStatus();
+            inventarioInterval = setInterval(() => {
+                cargarInventario();
+                cargarColaStatus();
+            }, 5000);
         }
 
         function cerrarSesion() {
@@ -700,6 +711,7 @@
             // Ocultar badges de conexión
             document.getElementById('status-medicas').style.display = 'none';
             document.getElementById('status-administrativas').style.display = 'none';
+            document.getElementById('status-queue').style.display = 'none';
             
             // Limpiar datos
             usuarioActual = null;
@@ -716,6 +728,35 @@
             // Volver al login
             document.getElementById('app-container').style.display = 'none';
             document.getElementById('login-container').style.display = 'flex';
+        }
+
+        async function cargarColaStatus() {
+            try {
+                const response = await fetch('/api/mw/status');
+                const data = await response.json();
+                if (data.status === 'OK') {
+                    const countEl = document.getElementById('queue-count');
+                    const dotEl = document.getElementById('dot-queue');
+                    countEl.textContent = data.queueSize;
+                    if (data.queueSize > 0) {
+                        dotEl.className = 'status-dot';
+                        dotEl.style.backgroundColor = 'var(--color-warning)';
+                        dotEl.style.animation = 'pulse-danger 1.5s infinite';
+                        dotEl.style.boxShadow = '0 0 6px var(--color-warning)';
+                    } else {
+                        dotEl.className = 'status-dot';
+                        dotEl.style.backgroundColor = 'var(--color-success)';
+                        dotEl.style.animation = 'none';
+                        dotEl.style.boxShadow = '0 0 6px var(--color-success)';
+                    }
+                }
+            } catch (err) {
+                console.error('Error al cargar status de cola:', err);
+                const dotEl = document.getElementById('dot-queue');
+                dotEl.className = 'status-dot';
+                dotEl.style.backgroundColor = 'var(--color-danger)';
+                dotEl.style.boxShadow = '0 0 6px var(--color-danger)';
+            }
         }
 
         async function cargarInventario() {
