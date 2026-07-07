@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  db-local-master:
+    image: postgres:16-alpine
+    container_name: db-local-master
+    restart: always
+    environment:
+      POSTGRES_DB: clinica
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass
+    volumes:
+      - db_local_master_data:/var/lib/postgresql/data
+      - ./config/db/00-pghba.sh:/docker-entrypoint-initdb.d/00-pghba.sh:ro
+      - ./config/db/init-local.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d clinica"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    extra_hosts:
+      - "db-nube:10.128.0.20"
+    networks:
+      - hospital_net
+
+  db-local-replica:
+    image: postgres:16-alpine
+    container_name: db-local-replica
+    restart: always
+    environment:
+      PGPASSWORD: repl_secure_pass
+    volumes:
+      - db_local_replica_data:/var/lib/postgresql/data
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+          echo "Replica vacia. Sincronizando con base principal..."
+          until pg_basebackup -h db-local-master -D /var/lib/postgresql/data -U replicator -v -P -R; do
+            echo "Esperando por db-local-master..."
+            sleep 2
+          done
+        fi
+        exec docker-entrypoint.sh postgres
+    depends_on:
+      db-local-master:
+        condition: service_healthy
+    networks:
+      - hospital_net
+
+  db-local-proxy:
+    image: haproxy:2.8-alpine
+    container_name: db-local-proxy
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./config/proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - db-local-master
+      - db-local-replica
+    networks:
+      - hospital_net
+      - dmz_net
+
+  app-estaciones:
+    image: app-estaciones-pg:latest
+    container_name: app-estaciones
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      - DB_HOST=db-local-proxy
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - hospital_net
+    depends_on:
+      - db-local-proxy
+
+  app-estaciones-replica:
+    image: app-estaciones-pg:latest
+    container_name: app-estaciones-replica
+    restart: always
+    ports:
+      - "8011:8001"
+    environment:
+      - DB_HOST=db-local-proxy
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - hospital_net
+    depends_on:
+      - db-local-proxy
+
+networks:
+  hospital_net:
+    driver: bridge
+    name: hospital_net
+  dmz_net:
+    driver: bridge
+    name: dmz_net
+
+volumes:
+  db_local_master_data:
+    name: db_local_master_data
+  db_local_replica_data:
+    name: db_local_replica_data

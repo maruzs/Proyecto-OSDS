@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  db-nube-master:
+    image: postgres:16-alpine
+    container_name: db-nube-master
+    restart: always
+    environment:
+      POSTGRES_DB: clinica
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass
+    volumes:
+      - db_nube_master_data:/var/lib/postgresql/data
+      - ./config/db/00-pghba.sh:/docker-entrypoint-initdb.d/00-pghba.sh:ro
+      - ./config/db/init-nube.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d clinica"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    extra_hosts:
+      - "db-local:10.128.0.10"
+    networks:
+      - cloud_net
+      - dmz_net
+
+  db-nube-replica:
+    image: postgres:16-alpine
+    container_name: db-nube-replica
+    restart: always
+    environment:
+      PGPASSWORD: repl_secure_pass
+    volumes:
+      - db_nube_replica_data:/var/lib/postgresql/data
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+          echo "Replica vacia. Sincronizando con base principal..."
+          until pg_basebackup -h db-nube-master -D /var/lib/postgresql/data -U replicator -v -P -R; do
+            echo "Esperando por db-nube-master..."
+            sleep 2
+          done
+        fi
+        exec docker-entrypoint.sh postgres
+    depends_on:
+      db-nube-master:
+        condition: service_healthy
+    networks:
+      - cloud_net
+
+  db-nube-proxy:
+    image: haproxy:2.8-alpine
+    container_name: db-nube-proxy
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./config/proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - db-nube-master
+      - db-nube-replica
+    networks:
+      - cloud_net
+      - dmz_net
+
+  app-terminales:
+    build: ../../apps/terminales-administrativas
+    container_name: app-terminales
+    restart: always
+    ports:
+      - "8002:8002"
+    environment:
+      - DB_HOST=db-nube-proxy
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - cloud_net
+    depends_on:
+      - db-nube-proxy
+
+  app-terminales-replica:
+    build: ../../apps/terminales-administrativas
+    container_name: app-terminales-replica
+    restart: always
+    ports:
+      - "8012:8002"
+    environment:
+      - DB_HOST=db-nube-proxy
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres_secure_pass
+      - DB_NAME=clinica
+    networks:
+      - cloud_net
+    depends_on:
+      - db-nube-proxy
+
+networks:
+  cloud_net:
+    driver: bridge
+    name: cloud_net
+  dmz_net:
+    driver: bridge
+    name: dmz_net
+
+volumes:
+  db_nube_master_data:
+    name: db_nube_master_data
+  db_nube_replica_data:
+    name: db_nube_replica_data

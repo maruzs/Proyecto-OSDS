@@ -1,0 +1,1 @@
+-- Replicación física de Postgres manejada por entrypoint, no requiere init script.

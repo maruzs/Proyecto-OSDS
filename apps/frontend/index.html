@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centro de Salud Digital - Terminal Distribuida</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --border-color: #cbd5e1;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            
+            --primary-glow: #0284c7; /* Azul Clínico */
+            --secondary-glow: #0d9488; /* Verde Hospitalario */
+            
+            --color-success: #15803d;
+            --color-warning: #b45309;
+            --color-danger: #b91c1c;
+            --color-info: #1d4ed8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif;
+            transition: all 0.2s ease-in-out;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(2, 132, 199, 0.04) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(13, 148, 136, 0.04) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        /* --- LOGIN CONTAINER --- */
+        #login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            padding: 2rem;
+        }
+
+        .login-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 3rem;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+            text-align: center;
+            border-top: 5px solid var(--primary-glow);
+        }
+
+        .login-card h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.75rem;
+            color: #1e3a8a;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        .login-card p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        /* --- APP CONTAINER (DASHBOARD) --- */
+        #app-container {
+            display: none; /* Se muestra post-login */
+            flex-direction: column;
+            flex: 1;
+        }
+
+        header {
+            padding: 1.2rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        }
+
+        .logo-section h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #1e3a8a;
+            letter-spacing: -0.5px;
+        }
+
+        .logo-section p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .user-status-bar {
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+        }
+
+        .user-badge {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .role-tag {
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .role-tag.admin {
+            background: #ccfbf1;
+            color: #0f766e;
+        }
+
+        .connection-status {
+            display: flex;
+            gap: 0.8rem;
+        }
+
+        .status-badge {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 6px currentColor;
+        }
+
+        .status-connected {
+            color: var(--color-success);
+        }
+
+        .status-disconnected {
+            color: var(--color-danger);
+            animation: pulse-danger 1.5s infinite;
+        }
+
+        @keyframes pulse-danger {
+            0% { opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { opacity: 0.4; }
+        }
+
+        main {
+            flex: 1;
+            padding: 2rem 3rem;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            border-top: 4px solid var(--border-color);
+        }
+
+        .estaciones-card {
+            border-top-color: var(--primary-glow);
+        }
+
+        .terminales-card {
+            border-top-color: var(--secondary-glow);
+        }
+
+        .card-header h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #1e3a8a;
+        }
+
+        .card-header p {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-top: 0.2rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, textarea, select {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: var(--text-primary);
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn {
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--primary-glow);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0270a5;
+        }
+
+        .btn-secondary {
+            background: var(--secondary-glow);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #0b7a70;
+        }
+
+        .btn-danger {
+            background: #fee2e2;
+            color: var(--color-danger);
+            border: 1px solid #fecaca;
+        }
+
+        .btn-danger:hover {
+            background: #fca5a5;
+            color: white;
+        }
+
+        /* Ficha Paciente Visualizer */
+        .ficha-resultado {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.2rem;
+            background: #f8fafc;
+            display: none;
+            flex-direction: column;
+            gap: 1rem;
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .ficha-info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.6rem 1.2rem;
+            font-size: 0.9rem;
+        }
+
+        .ficha-label {
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+
+        .ficha-valor {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .badge-origen {
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+
+        .badge-local {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+
+        .badge-nube {
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #bae6fd;
+        }
+
+        /* Feed Admisiones */
+        .admisiones-feed {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            height: 200px;
+            overflow-y: auto;
+            padding: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            background: #f8fafc;
+        }
+
+        .feed-item {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            animation: slideIn 0.2s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .feed-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .feed-item-name {
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: #1e293b;
+        }
+
+        .feed-item-time {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+
+        .feed-item-details {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* Toast Container */
+        .toast-container {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            z-index: 1000;
+        }
+
+        .toast {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            padding: 0.8rem 1.2rem;
+            border-radius: 8px;
+            color: #1e293b;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-weight: 600;
+            font-size: 0.85rem;
+            animation: toastIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes toastIn {
+            from { transform: translateY(50%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .toast-success { border-left: 4px solid var(--color-success); }
+        .toast-error { border-left: 4px solid var(--color-danger); }
+        .toast-info { border-left: 4px solid var(--color-info); }
+
+        footer {
+            padding: 1.5rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            border-top: 1px solid var(--border-color);
+            background: #ffffff;
+            margin-top: auto;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- --- SECCIÓN DE ACCESO / LOGIN --- -->
+    <div id="login-container">
+        <div class="login-card">
+            <h2>Acceso a Terminal Clínica</h2>
+            <p>Por favor seleccione su rol para ingresar al sistema distribuido.</p>
+            
+            <form onsubmit="event.preventDefault(); ingresarSistema();" style="display: flex; flex-direction: column; gap: 1.2rem; text-align: left;">
+                <div class="form-group">
+                    <label for="login-name">Nombre del Profesional</label>
+                    <input type="text" id="login-name" placeholder="Ej: Dr. Pérez" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="login-role">Rol Asignado</label>
+                    <select id="login-role" required>
+                        <option value="" disabled selected>Seleccione su rol...</option>
+                        <option value="medico">Médico (Estaciones Clínicas)</option>
+                        <option value="enfermero">Enfermero (Estaciones Clínicas)</option>
+                        <option value="administrativo">Administrativo (Mesón / Admisiones)</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
+                    Ingresar al Sistema
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- --- CONTENEDOR PRINCIPAL DE LA APLICACIÓN --- -->
+    <div id="app-container">
+        <header>
+            <div class="logo-section">
+                <h1>CENTRO DE SALUD DIGITAL</h1>
+                <p>Terminal Distribuida de Alta Disponibilidad</p>
+            </div>
+            
+            <div class="user-status-bar">
+                <div class="user-badge">
+                    <span>👤 <strong id="header-user-name">-</strong></span>
+                    <span class="role-tag" id="header-user-role">-</span>
+                </div>
+                
+                <button class="btn btn-danger" onclick="cerrarSesion()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                    Cerrar Sesión
+                </button>
+                
+                <div class="connection-status">
+                    <div class="status-badge" id="status-medicas" style="display: none;">
+                        <span class="status-dot status-disconnected" id="dot-medicas"></span>
+                        <span>Estaciones Médicas (Local)</span>
+                    </div>
+                    <div class="status-badge" id="status-administrativas" style="display: none;">
+                        <span class="status-dot status-disconnected" id="dot-administrativas"></span>
+                        <span>Terminales Adm. (Nube)</span>
+                    </div>
+                    <div class="status-badge" id="status-queue" style="display: none;">
+                        <span class="status-dot status-connected" id="dot-queue" style="background-color: var(--color-success);"></span>
+                        <span>Cola Contingencia: <strong id="queue-count">0</strong></span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Panel Estaciones Médicas (Solo para Médicos y Enfermeros) -->
+            <section class="card estaciones-card" id="panel-estaciones" style="display: none;">
+                <div class="card-header">
+                    <h2>⚕️ Estaciones Médicas (Consulta y Ficha Clínica)</h2>
+                    <p>Acceso a datos locales del Hospital. Permite consultar fichas y registrar diagnósticos.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="buscar-rut">Consultar Ficha Paciente</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="buscar-rut" placeholder="Ej: 12345678-9" style="flex: 1;">
+                        <button class="btn btn-primary" id="btn-buscar">Buscar Ficha</button>
+                    </div>
+                </div>
+
+                <!-- Detalle Ficha -->
+                <div class="ficha-resultado" id="ficha-box">
+                    <div class="ficha-info-grid">
+                        <span class="ficha-label">ID Registro:</span>
+                        <span class="ficha-valor" id="ficha-id" style="font-family: monospace; font-size: 0.8rem;">-</span>
+                        
+                        <span class="ficha-label">Nombre Paciente:</span>
+                        <span class="ficha-valor" id="ficha-nombre">-</span>
+                        
+                        <span class="ficha-label">RUT:</span>
+                        <span class="ficha-valor" id="ficha-rut">-</span>
+                        
+                        <span class="ficha-label">Origen Registro:</span>
+                        <span class="ficha-valor"><span id="ficha-origen" class="badge-origen badge-local">Local</span></span>
+                        
+                        <span class="ficha-label">Última Actualización:</span>
+                        <span class="ficha-valor" id="ficha-fecha">-</span>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 0.8rem;">
+                        <label for="diagnostico-input">Diagnóstico y Prescripción Médica</label>
+                        <textarea id="diagnostico-input" rows="4" placeholder="Ingrese los detalles clínicos de la atención..."></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" id="btn-actualizar">
+                        Guardar Cambios Clínicos
+                    </button>
+                </div>
+            </section>
+
+            <!-- Panel Terminales Administrativas (Solo para Administrativos) -->
+            <section class="card terminales-card" id="panel-terminales" style="display: none;">
+                <div class="card-header">
+                    <h2>📋 Terminales Administrativas (Ingreso de Pacientes)</h2>
+                    <p>Acceso a datos core en la Nube. Permite admitir pacientes al flujo del establecimiento.</p>
+                </div>
+
+                <form id="form-admision" onsubmit="event.preventDefault(); admitirPaciente();" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="adm-rut">RUT Paciente</label>
+                        <input type="text" id="adm-rut" placeholder="Ej: 12345678-9" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adm-nombre">Nombre Completo</label>
+                        <input type="text" id="adm-nombre" placeholder="Nombres y Apellidos" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adm-diagnostico">Motivo del Ingreso / Diagnóstico Preliminar</label>
+                        <textarea id="adm-diagnostico" rows="2" placeholder="Paciente se presenta a urgencias por sintomatología..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-secondary" id="btn-admitir">
+                        Admitir Paciente en Nube
+                    </button>
+                </form>
+
+                <div class="form-group">
+                    <label>Registro Reciente de Admisiones (Feed en Tiempo Real)</label>
+                    <div class="admisiones-feed" id="admisiones-feed">
+                        <!-- Items dinámicos -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Panel Inventario de Bodega (Visible para todos los roles) -->
+            <section class="card bodega-card" id="panel-bodega" style="border-top-color: #8b5cf6;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2>📦 Inventario de Bodega e Insumos Clínicos</h2>
+                        <p>Stock actual en la base de datos central. Se actualiza automáticamente ante prescripciones médicas.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="cargarInventario()" style="background: #8b5cf6;">
+                        🔄 Refrescar Stock
+                    </button>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-color); background: #f8fafc;">
+                                <th style="padding: 0.75rem;">Código</th>
+                                <th style="padding: 0.75rem;">Descripción de Insumo</th>
+                                <th style="padding: 0.75rem; text-align: right;">Cantidad Disponible</th>
+                                <th style="padding: 0.75rem; text-align: center;">Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventario-body">
+                            <tr>
+                                <td colspan="4" style="padding: 1rem; text-align: center; color: var(--text-secondary);">Cargando inventario...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <div class="toast-container" id="toast-container"></div>
+
+        <footer>
+            <p>Universidad OSDS | Unidad de Infraestructura Transversal y Sistemas Distribuidos</p>
+        </footer>
+    </div>
+
+    <script>
+        let socketMedicas = null;
+        let socketAdministrativas = null;
+        let usuarioActual = null;
+        let rolActual = null;
+        let inventarioInterval = null;
+
+        function ingresarSistema() {
+            const nombre = document.getElementById('login-name').value.trim();
+            const rol = document.getElementById('login-role').value;
+            
+            if (!nombre || !rol) return;
+            
+            usuarioActual = nombre;
+            rolActual = rol;
+            
+            // Ocultar login, mostrar dashboard
+            document.getElementById('login-container').style.display = 'none';
+            document.getElementById('app-container').style.display = 'flex';
+            
+            // Actualizar datos del header
+            document.getElementById('header-user-name').textContent = usuarioActual;
+            const roleTag = document.getElementById('header-user-role');
+            roleTag.textContent = rolActual === 'medico' ? 'Médico' : rolActual === 'enfermero' ? 'Enfermero' : 'Administrativo';
+            if (rolActual === 'administrativo') {
+                roleTag.classList.add('admin');
+            } else {
+                roleTag.classList.remove('admin');
+            }
+            
+            // Configurar Vistas por Rol e inicializar Sockets
+            inicializarVistasYSockets(rolActual);
+
+            // Mostrar el status de la cola
+            document.getElementById('status-queue').style.display = 'flex';
+
+            // Cargar e iniciar actualización periódica del inventario de bodega y cola status
+            cargarInventario();
+            cargarColaStatus();
+            inventarioInterval = setInterval(() => {
+                cargarInventario();
+                cargarColaStatus();
+            }, 5000);
+        }
+
+        function cerrarSesion() {
+            // Desconectar Sockets
+            if (socketMedicas) {
+                socketMedicas.disconnect();
+                socketMedicas = null;
+            }
+            if (socketAdministrativas) {
+                socketAdministrativas.disconnect();
+                socketAdministrativas = null;
+            }
+            
+            // Detener actualización de inventario
+            if (inventarioInterval) {
+                clearInterval(inventarioInterval);
+                inventarioInterval = null;
+            }
+            
+            // Ocultar badges de conexión
+            document.getElementById('status-medicas').style.display = 'none';
+            document.getElementById('status-administrativas').style.display = 'none';
+            document.getElementById('status-queue').style.display = 'none';
+            
+            // Limpiar datos
+            usuarioActual = null;
+            rolActual = null;
+            
+            // Ocultar paneles
+            document.getElementById('panel-estaciones').style.display = 'none';
+            document.getElementById('panel-terminales').style.display = 'none';
+            document.getElementById('ficha-box').style.display = 'none';
+            document.getElementById('buscar-rut').value = '';
+            document.getElementById('form-admision').reset();
+            document.getElementById('admisiones-feed').innerHTML = '';
+            
+            // Volver al login
+            document.getElementById('app-container').style.display = 'none';
+            document.getElementById('login-container').style.display = 'flex';
+        }
+
+        async function cargarColaStatus() {
+            try {
+                const response = await fetch('/api/mw/status');
+                const data = await response.json();
+                if (data.status === 'OK') {
+                    const countEl = document.getElementById('queue-count');
+                    const dotEl = document.getElementById('dot-queue');
+                    countEl.textContent = data.queueSize;
+                    if (data.queueSize > 0) {
+                        dotEl.className = 'status-dot';
+                        dotEl.style.backgroundColor = 'var(--color-warning)';
+                        dotEl.style.animation = 'pulse-danger 1.5s infinite';
+                        dotEl.style.boxShadow = '0 0 6px var(--color-warning)';
+                    } else {
+                        dotEl.className = 'status-dot';
+                        dotEl.style.backgroundColor = 'var(--color-success)';
+                        dotEl.style.animation = 'none';
+                        dotEl.style.boxShadow = '0 0 6px var(--color-success)';
+                    }
+                }
+            } catch (err) {
+                console.error('Error al cargar status de cola:', err);
+                const dotEl = document.getElementById('dot-queue');
+                dotEl.className = 'status-dot';
+                dotEl.style.backgroundColor = 'var(--color-danger)';
+                dotEl.style.boxShadow = '0 0 6px var(--color-danger)';
+            }
+        }
+
+        async function cargarInventario() {
+            try {
+                const response = await fetch('/api/inventario');
+                const data = await response.json();
+                if (data.status === 'OK' && data.datos) {
+                    const tbody = document.getElementById('inventario-body');
+                    tbody.innerHTML = '';
+                    data.datos.forEach(item => {
+                        const tr = document.createElement('tr');
+                        tr.style.borderBottom = '1px solid #e2e8f0';
+                        const stockStyle = item.stock < 200 ? 'color: var(--color-warning); font-weight: 700;' : 'color: var(--text-primary); font-weight: 600;';
+                        tr.innerHTML = `
+                            <td style="padding: 0.75rem; font-family: monospace; font-weight: 600;">${item.codigo}</td>
+                            <td style="padding: 0.75rem; font-weight: 500;">${item.nombre}</td>
+                            <td style="padding: 0.75rem; text-align: right; ${stockStyle}">${item.stock}</td>
+                            <td style="padding: 0.75rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">${item.unidad || 'unidades'}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (err) {
+                console.error('Error al cargar inventario:', err);
+                const tbody = document.getElementById('inventario-body');
+                tbody.innerHTML = `<tr><td colspan="4" style="padding: 1rem; text-align: center; color: var(--color-danger); font-weight: 600;">⚠️ Error al conectar con el servicio de Bodega</td></tr>`;
+            }
+        }
+
+        function inicializarVistasYSockets(rol) {
+            if (rol === 'medico' || rol === 'enfermero') {
+                document.getElementById('panel-estaciones').style.display = 'flex';
+                document.getElementById('status-medicas').style.display = 'flex';
+                
+                // Conectar al socket de Estaciones Médicas
+                socketMedicas = io({
+                    path: '/ws-medicas',
+                    auth: { token: 'clinica-local-auth', rol: rol, usuario: usuarioActual }
+                });
+                
+                configurarSocketMedicas();
+                
+            } else if (rol === 'administrativo') {
+                document.getElementById('panel-terminales').style.display = 'flex';
+                document.getElementById('status-administrativas').style.display = 'flex';
+                
+                // Conectar al socket de Terminales Administrativas
+                socketAdministrativas = io({
+                    path: '/ws-administrativas',
+                    auth: { token: 'clinica-cloud-auth', rol: rol, usuario: usuarioActual }
+                });
+                
+                configurarSocketAdministrativas();
+            }
+        }
+
+        // --- MANEJO DE EVENTOS WEBSOCKET: ESTACIONES MÉDICAS ---
+        function configurarSocketMedicas() {
+            socketMedicas.on('connect', () => {
+                const dot = document.getElementById('dot-medicas');
+                dot.className = 'status-dot status-connected';
+                showToast('Conectado al Servidor de Estaciones Médicas (Local)', 'info');
+            });
+
+            socketMedicas.on('disconnect', () => {
+                const dot = document.getElementById('dot-medicas');
+                dot.className = 'status-dot status-disconnected';
+                showToast('Desconectado de Estaciones Médicas', 'error');
+            });
+
+            socketMedicas.on('ficha_paciente', (res) => {
+                const fichaBox = document.getElementById('ficha-box');
+                if (res.estado === 'OK') {
+                    fichaBox.style.display = 'flex';
+                    document.getElementById('ficha-id').textContent = res.datos.id;
+                    document.getElementById('ficha-nombre').textContent = res.datos.nombre;
+                    document.getElementById('ficha-rut').textContent = res.datos.rut;
+                    
+                    const fOrigen = document.getElementById('ficha-origen');
+                    fOrigen.textContent = res.datos.origen_registro;
+                    fOrigen.className = `badge-origen badge-${res.datos.origen_registro}`;
+                    
+                    document.getElementById('ficha-fecha').textContent = new Date(res.datos.fecha_actualizacion).toLocaleString();
+                    document.getElementById('diagnostico-input').value = res.datos.diagnostico || '';
+                    showToast('Ficha clínica cargada', 'success');
+                } else if (res.estado === 'NO_ENCONTRADO') {
+                    fichaBox.style.display = 'none';
+                    showToast('Paciente no encontrado en el servidor local', 'error');
+                } else {
+                    fichaBox.style.display = 'none';
+                    showToast(`Error al consultar: ${res.mensaje}`, 'error');
+                }
+            });
+
+            socketMedicas.on('diagnostico_actualizado', (res) => {
+                if (res.estado === 'OK') {
+                    document.getElementById('ficha-fecha').textContent = new Date(res.datos.fecha_actualizacion).toLocaleString();
+                    showToast('Diagnóstico guardado correctamente en DB Local', 'success');
+                } else {
+                    showToast(`Error al actualizar diagnóstico: ${res.mensaje}`, 'error');
+                }
+            });
+        }
+
+        // Event Listeners para panel clínico
+        document.getElementById('btn-buscar').addEventListener('click', () => {
+            const rut = document.getElementById('buscar-rut').value.trim();
+            if (!rut) {
+                showToast('Ingrese un RUT para realizar la consulta', 'error');
+                return;
+            }
+            if (socketMedicas && socketMedicas.connected) {
+                socketMedicas.emit('consultar_paciente', { rut, rol: rolActual, usuario: usuarioActual });
+            } else {
+                showToast('Sin conexión con el servidor local', 'error');
+            }
+        });
+
+        document.getElementById('btn-actualizar').addEventListener('click', () => {
+            const id = document.getElementById('ficha-id').textContent;
+            const diagnostico = document.getElementById('diagnostico-input').value.trim();
+            if (!diagnostico) {
+                showToast('El diagnóstico no puede guardarse vacío', 'error');
+                return;
+            }
+            if (socketMedicas && socketMedicas.connected) {
+                socketMedicas.emit('actualizar_diagnostico', { id, diagnostico, rol: rolActual, usuario: usuarioActual });
+            } else {
+                showToast('Sin conexión con el servidor local', 'error');
+            }
+        });
+
+        // --- MANEJO DE EVENTOS WEBSOCKET: TERMINALES ADMINISTRATIVAS ---
+        function configurarSocketAdministrativas() {
+            socketAdministrativas.on('connect', () => {
+                const dot = document.getElementById('dot-administrativas');
+                dot.className = 'status-dot status-connected';
+                showToast('Conectado al Servidor de Terminales Administrativas (Nube)', 'info');
+            });
+
+            socketAdministrativas.on('disconnect', () => {
+                const dot = document.getElementById('dot-administrativas');
+                dot.className = 'status-dot status-disconnected';
+                showToast('Desconectado de Terminales Administrativas', 'error');
+            });
+
+            socketAdministrativas.on('paciente_admitido_confirmado', (data) => {
+                showToast(`Paciente ${data.nombre} admitido correctamente`, 'success');
+                
+                const feed = document.getElementById('admisiones-feed');
+                const item = document.createElement('div');
+                item.className = 'feed-item';
+                
+                const timeStr = new Date(data.fecha_actualizacion).toLocaleTimeString();
+                
+                item.innerHTML = `
+                    <div class="feed-item-header">
+                        <span class="feed-item-name">👤 ${data.nombre}</span>
+                        <span class="feed-item-time">${timeStr}</span>
+                    </div>
+                    <div class="feed-item-details">
+                        <strong>RUT:</strong> ${data.rut} | <strong>Origen:</strong> <span class="badge-origen badge-${data.origen_registro}">${data.origen_registro}</span>
+                    </div>
+                    <div class="feed-item-details" style="margin-top: 0.1rem; font-style: italic;">
+                        "${data.diagnostico}"
+                    </div>
+                `;
+                feed.insertBefore(item, feed.firstChild);
+                
+                // Si nosotros hicimos el envío, limpiamos el formulario
+                if (document.getElementById('adm-rut').value.trim() === data.rut) {
+                    document.getElementById('form-admision').reset();
+                }
+            });
+
+            socketAdministrativas.on('error_admision', (data) => {
+                showToast(`Error de admisión: ${data.error}`, 'error');
+            });
+        }
+
+        function admitirPaciente() {
+            const rut = document.getElementById('adm-rut').value.trim();
+            const nombre = document.getElementById('adm-nombre').value.trim();
+            const diagnostico = document.getElementById('adm-diagnostico').value.trim();
+            
+            if (socketAdministrativas && socketAdministrativas.connected) {
+                socketAdministrativas.emit('admitir_paciente', { rut, nombre, diagnostico, rol: rolActual, usuario: usuarioActual });
+            } else {
+                showToast('Sin conexión con el servidor de la nube', 'error');
+            }
+        }
+
+        // --- TOAST NOTIFICATIONS ---
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.2s ease forwards';
+                setTimeout(() => toast.remove(), 200);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
