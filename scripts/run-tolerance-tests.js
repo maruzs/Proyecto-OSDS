@@ -20,7 +20,7 @@ function parseStock(stdout, codigo) {
     const lines = stdout.split("\n");
     for (const line of lines) {
         if (line.includes(codigo)) {
-            const parts = line.split("|");
+            const parts = line.split("\t");
             if (parts.length >= 3) {
                 return parseInt(parts[2].trim());
             }
@@ -183,7 +183,7 @@ async function runTest3() {
     console.log("==========================================");
 
     console.log("1. Get current stock of Paracetamol 500mg (INS-001) in DB Central...");
-    const stockQueryBefore = await runCmd('gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec db-central-master psql -U postgres -d clinica_central -c \'SELECT * FROM inventario_insumos;\'" --quiet');
+    const stockQueryBefore = await runCmd('gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec db-central-master mysql -u root -proot_secure_pass -e \'SELECT * FROM clinica_central.inventario_insumos;\'" --quiet');
     console.log("[STOCK_BEFORE]:\n", stockQueryBefore.stdout);
     const initialStock = parseStock(stockQueryBefore.stdout, "INS-001");
 
@@ -212,15 +212,15 @@ async function runTest3() {
 
     socket.disconnect();
 
-    console.log("Waiting 4 seconds for asynchronous diagnosis notification to propagate and queue in PostgreSQL...");
+    console.log("Waiting 4 seconds for asynchronous diagnosis notification to propagate and queue in SQLite...");
     await sleep(4000);
 
-    console.log("5. Querying local PostgreSQL contingency database in 'app-middleware'...");
+    console.log("5. Querying local SQLite contingency database in 'app-middleware'...");
     const sqliteBefore = await runCmd('gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec app-middleware node /app/query-sqlite-container.js" --quiet');
-    console.log("[POSTGRES_QUEUE_BEFORE]:\n", sqliteBefore.stdout);
+    console.log("[SQLITE_QUEUE_BEFORE]:\n", sqliteBefore.stdout);
 
     if (!sqliteBefore.stdout.includes("DESCONTAR_BODEGA")) {
-        throw new Error("Prescription item was not queued in PostgreSQL contingency database!");
+        throw new Error("Prescription item was not queued in SQLite contingencia.db!");
     }
 
     console.log("6. Restoring inventory service 'app-bodega' on VM3...");
@@ -229,12 +229,12 @@ async function runTest3() {
     console.log("7. Waiting 12 seconds for background synchronizer worker to run...");
     await sleep(12000);
 
-    console.log("8. Querying PostgreSQL contingency database again (should be empty)...");
+    console.log("8. Querying SQLite contingency database again (should be empty)...");
     const sqliteAfter = await runCmd('gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec app-middleware node /app/query-sqlite-container.js" --quiet');
-    console.log("[POSTGRES_QUEUE_AFTER]:\n", sqliteAfter.stdout || "(empty queue)");
+    console.log("[SQLITE_QUEUE_AFTER]:\n", sqliteAfter.stdout || "(empty queue)");
 
     console.log("9. Verifying final stock of Paracetamol 500mg (INS-001) in DB Central (should be decremented by 1)...");
-    const stockQueryAfter = await runCmd('gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec db-central-master psql -U postgres -d clinica_central -c \'SELECT * FROM inventario_insumos;\'" --quiet');
+    const stockQueryAfter = await runCmd('gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec db-central-master mysql -u root -proot_secure_pass -e \'SELECT * FROM clinica_central.inventario_insumos;\'" --quiet');
     console.log("[STOCK_AFTER]:\n", stockQueryAfter.stdout);
     const finalStock = parseStock(stockQueryAfter.stdout, "INS-001");
 

@@ -2,48 +2,36 @@ version: '3.8'
 
 services:
   db-local-master:
-    image: postgres:16-alpine
+    image: mariadb:10.11
     container_name: db-local-master
     restart: always
     environment:
-      POSTGRES_DB: clinica
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_secure_pass
+      MARIADB_ROOT_PASSWORD: root_secure_pass
+      MARIADB_DATABASE: clinica
+      MARIADB_USER: clinica_user
+      MARIADB_PASSWORD: clinica_secure_pass
     volumes:
-      - db_local_master_data:/var/lib/postgresql/data
-      - ./config/db/00-pghba.sh:/docker-entrypoint-initdb.d/00-pghba.sh:ro
-      - ./config/db/init-local.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+      - db_local_master_data:/var/lib/mysql
+      - ./config/db/init-local.sql:/docker-entrypoint-initdb.d/init-local.sql:ro
+    command: mariadbd --server-id=1 --log-bin=mysql-bin --binlog-format=ROW
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d clinica"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
-    extra_hosts:
-      - "db-nube:10.128.0.20"
     networks:
       - hospital_net
 
   db-local-replica:
-    image: postgres:16-alpine
+    image: mariadb:10.11
     container_name: db-local-replica
     restart: always
     environment:
-      PGPASSWORD: repl_secure_pass
+      MARIADB_ROOT_PASSWORD: root_secure_pass
     volumes:
-      - db_local_replica_data:/var/lib/postgresql/data
-    entrypoint:
-      - bash
-      - -c
-      - |
-        if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
-          echo "Replica vacia. Sincronizando con base principal..."
-          until pg_basebackup -h db-local-master -D /var/lib/postgresql/data -U replicator -v -P -R; do
-            echo "Esperando por db-local-master..."
-            sleep 2
-          done
-        fi
-        exec docker-entrypoint.sh postgres
+      - db_local_replica_data:/var/lib/mysql
+      - ./config/db/init-replica.sql:/docker-entrypoint-initdb.d/init-replica.sql:ro
+    command: mariadbd --server-id=2 --read-only=1
     depends_on:
       db-local-master:
         condition: service_healthy
@@ -55,7 +43,7 @@ services:
     container_name: db-local-proxy
     restart: always
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
       - ./config/proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
@@ -66,16 +54,16 @@ services:
       - dmz_net
 
   app-estaciones:
-    image: app-estaciones-pg:latest
+    image: app-estaciones:latest
     container_name: app-estaciones
     restart: always
     ports:
       - "8001:8001"
     environment:
       - DB_HOST=db-local-proxy
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres_secure_pass
+      - DB_PORT=3306
+      - DB_USER=clinica_user
+      - DB_PASSWORD=clinica_secure_pass
       - DB_NAME=clinica
     networks:
       - hospital_net
@@ -83,16 +71,16 @@ services:
       - db-local-proxy
 
   app-estaciones-replica:
-    image: app-estaciones-pg:latest
+    image: app-estaciones:latest
     container_name: app-estaciones-replica
     restart: always
     ports:
       - "8011:8001"
     environment:
       - DB_HOST=db-local-proxy
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres_secure_pass
+      - DB_PORT=3306
+      - DB_USER=clinica_user
+      - DB_PASSWORD=clinica_secure_pass
       - DB_NAME=clinica
     networks:
       - hospital_net

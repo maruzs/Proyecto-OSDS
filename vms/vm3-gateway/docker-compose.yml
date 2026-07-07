@@ -34,19 +34,13 @@ services:
       - "8000:8000"
     environment:
       - DB_CENTRAL_HOST=db-central-proxy
-      - DB_CENTRAL_PORT=5432
-      - DB_CENTRAL_USER=postgres
-      - DB_CENTRAL_PASSWORD=postgres_secure_pass
+      - DB_CENTRAL_PORT=3306
+      - DB_CENTRAL_USER=clinica_user
+      - DB_CENTRAL_PASSWORD=clinica_secure_pass
       - DB_CENTRAL_NAME=clinica_central
       - BODEGA_APP_URL=http://app-bodega:8003
-      - DB_CONTINGENCIA_HOST=db-contingencia
-      - DB_CONTINGENCIA_PORT=5432
-      - DB_CONTINGENCIA_USER=postgres
-      - DB_CONTINGENCIA_PASSWORD=postgres_secure_pass
-      - DB_CONTINGENCIA_NAME=contingencia
     depends_on:
       - db-central-proxy
-      - db-contingencia
     networks:
       - hospital_net
       - cloud_net
@@ -59,9 +53,9 @@ services:
       - "8003:8003"
     environment:
       - DB_CENTRAL_HOST=db-central-proxy
-      - DB_CENTRAL_PORT=5432
-      - DB_CENTRAL_USER=postgres
-      - DB_CENTRAL_PASSWORD=postgres_secure_pass
+      - DB_CENTRAL_PORT=3306
+      - DB_CENTRAL_USER=clinica_user
+      - DB_CENTRAL_PASSWORD=clinica_secure_pass
       - DB_CENTRAL_NAME=clinica_central
     depends_on:
       - db-central-proxy
@@ -69,20 +63,20 @@ services:
       - cloud_net
 
   db-central-master:
-    image: postgres:16-alpine
+    image: mysql:8.0
     container_name: db-central-master
     restart: always
     environment:
-      POSTGRES_DB: clinica_central
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_secure_pass
+      MYSQL_ROOT_PASSWORD: root_secure_pass
+      MYSQL_DATABASE: clinica_central
+      MYSQL_USER: clinica_user
+      MYSQL_PASSWORD: clinica_secure_pass
     volumes:
-      - db_central_master_data:/var/lib/postgresql/data
-      - ./config/db/00-pghba.sh:/docker-entrypoint-initdb.d/00-pghba.sh:ro
-      - ./config/db/init-central.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: postgres -c wal_level=logical -c max_connections=100 -c max_replication_slots=10 -c max_wal_senders=10
+      - db_central_master_data:/var/lib/mysql
+      - ./config/db/init-central.sql:/docker-entrypoint-initdb.d/init-central.sql:ro
+    command: --server-id=10 --log-bin=mysql-bin --binlog-format=ROW
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d clinica_central"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -90,25 +84,15 @@ services:
       - cloud_net
 
   db-central-replica:
-    image: postgres:16-alpine
+    image: mysql:8.0
     container_name: db-central-replica
     restart: always
     environment:
-      PGPASSWORD: repl_secure_pass
+      MYSQL_ROOT_PASSWORD: root_secure_pass
     volumes:
-      - db_central_replica_data:/var/lib/postgresql/data
-    entrypoint:
-      - bash
-      - -c
-      - |
-        if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
-          echo "Replica vacia. Sincronizando con base principal..."
-          until pg_basebackup -h db-central-master -D /var/lib/postgresql/data -U replicator -v -P -R; do
-            echo "Esperando por db-central-master..."
-            sleep 2
-          done
-        fi
-        exec docker-entrypoint.sh postgres
+      - db_central_replica_data:/var/lib/mysql
+      - ./config/db/init-replica-mysql.sql:/docker-entrypoint-initdb.d/init-replica-mysql.sql:ro
+    command: --server-id=20 --read-only=1
     depends_on:
       db-central-master:
         condition: service_healthy
@@ -120,7 +104,7 @@ services:
     container_name: db-central-proxy
     restart: always
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
       - ./config/proxy/haproxy-mysql.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
@@ -129,24 +113,6 @@ services:
     networks:
       - cloud_net
       - hospital_net
-
-  db-contingencia:
-    image: postgres:16-alpine
-    container_name: db-contingencia
-    restart: always
-    environment:
-      POSTGRES_DB: contingencia
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_secure_pass
-    volumes:
-      - db_contingencia_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d contingencia"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - cloud_net
 
 networks:
   hospital_net:
@@ -164,5 +130,3 @@ volumes:
     name: db_central_master_data
   db_central_replica_data:
     name: db_central_replica_data
-  db_contingencia_data:
-    name: db_contingencia_data

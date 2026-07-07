@@ -1,6 +1,7 @@
 FROM node:18-alpine
 
-# No longer need python3 make g++ since we use pg client without native build dependencies
+# Instalar herramientas para compilar sqlite3 nativo si es necesario en alpine
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 

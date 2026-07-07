@@ -465,22 +465,21 @@
     <div id="login-container">
         <div class="login-card">
             <h2>Acceso a Terminal Clínica</h2>
-            <p>Por favor seleccione su rol para ingresar al sistema distribuido.</p>
+            <p>Por favor ingrese sus credenciales para acceder al sistema distribuido.</p>
             
-            <form onsubmit="event.preventDefault(); ingresarSistema();" style="display: flex; flex-direction: column; gap: 1.2rem; text-align: left;">
+            <form id="login-form" onsubmit="event.preventDefault(); ingresarSistema();" style="display: flex; flex-direction: column; gap: 1.2rem; text-align: left;">
                 <div class="form-group">
-                    <label for="login-name">Nombre del Profesional</label>
-                    <input type="text" id="login-name" placeholder="Ej: Dr. Pérez" required>
+                    <label for="login-username">Usuario</label>
+                    <input type="text" id="login-username" placeholder="Ingrese su usuario..." required>
                 </div>
                 
                 <div class="form-group">
-                    <label for="login-role">Rol Asignado</label>
-                    <select id="login-role" required>
-                        <option value="" disabled selected>Seleccione su rol...</option>
-                        <option value="medico">Médico (Estaciones Clínicas)</option>
-                        <option value="enfermero">Enfermero (Estaciones Clínicas)</option>
-                        <option value="administrativo">Administrativo (Mesón / Admisiones)</option>
-                    </select>
+                    <label for="login-password">Contraseña</label>
+                    <input type="password" id="login-password" placeholder="Ingrese su contraseña..." required>
+                </div>
+                
+                <div id="login-error" style="color: var(--color-danger); font-size: 0.85rem; font-weight: 600; display: none; text-align: center;">
+                    Usuario o contraseña incorrectos.
                 </div>
                 
                 <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
@@ -654,13 +653,26 @@
         let inventarioInterval = null;
 
         function ingresarSistema() {
-            const nombre = document.getElementById('login-name').value.trim();
-            const rol = document.getElementById('login-role').value;
+            const user = document.getElementById('login-username').value.trim();
+            const pass = document.getElementById('login-password').value.trim();
+            const errorEl = document.getElementById('login-error');
             
-            if (!nombre || !rol) return;
+            errorEl.style.display = 'none';
             
-            usuarioActual = nombre;
-            rolActual = rol;
+            const accounts = {
+                'medico': { pass: 'medico123', name: 'Dr. Carlos', role: 'medico' },
+                'enfermero': { pass: 'enfermero123', name: 'Enf. Ana', role: 'enfermero' },
+                'admin': { pass: 'admin123', name: 'Adm. Luis', role: 'administrativo' }
+            };
+            
+            const account = accounts[user.toLowerCase()];
+            if (account && account.pass === pass) {
+                usuarioActual = account.name;
+                rolActual = account.role;
+            } else {
+                errorEl.style.display = 'block';
+                return;
+            }
             
             // Ocultar login, mostrar dashboard
             document.getElementById('login-container').style.display = 'none';
@@ -724,6 +736,8 @@
             document.getElementById('buscar-rut').value = '';
             document.getElementById('form-admision').reset();
             document.getElementById('admisiones-feed').innerHTML = '';
+            document.getElementById('login-form').reset();
+            document.getElementById('login-error').style.display = 'none';
             
             // Volver al login
             document.getElementById('app-container').style.display = 'none';
