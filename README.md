@@ -1,58 +1,156 @@
-# Proyecto OSDS - Sistema Distribuido de Fichas Clínicas (GCP)
+# Proyecto OSDS - Sistema Clínico Distribuido, Tolerante a Fallos y Altamente Disponible (GCP)
 
-Este repositorio contiene la implementación de un sistema distribuido de gestión de fichas clínicas y estaciones médicas, diseñado para simular la interacción entre un **Hospital Local** (con base de datos local y baja latencia) y una **Nube Central** (donde se consolidan los datos y se realizan operaciones administrativas). 
+Este repositorio contiene la implementación de un **sistema clínico distribuido de gestión de fichas clínicas y estaciones médicas**. Diseñado bajo principios de sistemas distribuidos avanzados, simula y coordina las operaciones en tiempo real entre un **Hospital Local** (baja latencia, operaciones clínicas directas) y una **Nube Central** (histórico de admisiones, sistema de stock de bodega y contingencia offline), desplegado en **Google Cloud Platform (GCP)**.
 
-La infraestructura completa está diseñada para desplegarse de manera distribuida en **Google Cloud Platform (GCP)** a través de tres Máquinas Virtuales (VMs) coordinadas mediante un proxy/gateway seguro y replicación bidireccional.
-
----
-
-## 🗂️ Estructura del Proyecto y Ramas (Branches)
-
-El repositorio está organizado utilizando una estrategia de desarrollo **multirama (multi-branch)**, donde cada rama representa el código y la configuración correspondiente a un nodo específico de la arquitectura o la documentación del proyecto:
-
-### 1. Rama `main` (Esta rama)
-*   **Propósito**: Punto de entrada global del proyecto, documentación general y explicación de la estructura.
-
-### 2. Rama `VM1` — Hospital Local (VM 1)
-Representa el nodo cliente local (instalado en el hospital físico) que requiere alta velocidad y tolerancia a desconexiones.
-*   **`db-local`**: Base de datos PostgreSQL 16 con los datos clínicos locales y configuración de replicación lógica activa para enviar datos a la nube.
-*   **`app-estaciones`** (`apps/estaciones-medicas`): Servidor backend en Node.js que gestiona consultas, actualizaciones y notificaciones de fichas clínicas en tiempo real a través de WebSockets.
-*   **`frontend`**: Interfaz de usuario para que el personal médico gestione y actualice las fichas locales.
-*   **Configuración**: `docker-compose.yml` que orquesta los servicios locales y scripts de prueba en `scripts/`.
-
-### 3. Rama `VM2` — Nube Central (VM 2)
-Representa el centro de datos principal o nube central que almacena el histórico completo y coordina las terminales administrativas.
-*   **`db-nube`**: Base de datos centralizada PostgreSQL 16 con el histórico de pacientes.
-*   **`app-terminales`** (`apps/terminales-administrativas`): Servidor backend encargado de las operaciones administrativas centrales.
-*   **`frontend`**: Interfaz para administradores para visualizar y buscar fichas a nivel centralizado.
-*   **Configuración**: Scripts de inicialización SQL (`config/db/init-nube.sql`) que configuran la replicación bidireccional de vuelta a la base de datos local.
-
-### 4. Rama `VM3` — Gateway & Seguridad (VM 3)
-Actúa como puerta de entrada segura y punto único de acceso al sistema distribuido.
-*   **`nginx-proxy`** (`config/nginx/nginx.conf`): Servidor NGINX configurado como balanceador de carga y proxy inverso para enrutar el tráfico web y WebSocket a los nodos correspondientes.
-*   **`cloudflare-tunnel`**: Contenedor Cloudflare Tunnel que expone los servicios externamente sin necesidad de abrir puertos públicos en la máquina virtual de GCP.
-
-### 5. Rama `informe` — Documentación Académica
-*   **Propósito**: Contiene el código fuente LaTeX (`informe.tex`) y los diagramas de arquitectura en PlantUML (`arqui.puml` / `arquitecturaV2.png`) utilizados para el reporte formal del proyecto.
+El sistema garantiza **Alta Disponibilidad (HA)** y **Tolerancia a Fallos** en todas sus capas, utilizando una topología de red en estrella con enrutamiento seguro mediante Cloudflare Tunnel y balanceadores de carga integrales.
 
 ---
 
-## ⚙️ Arquitectura del Sistema
+## 🏗️ Arquitectura del Sistema y Topología de Red
 
-El sistema opera bajo los siguientes principios distribuidos:
+El ecosistema se distribuye físicamente en **3 Máquinas Virtuales (VMs)** conectadas mediante una red privada VPC en GCP en la zona `us-central1-a`:
 
-1.  **Replicación Lógica Bidireccional**: Configurada a nivel de PostgreSQL 16 entre `db-local` (VM1) y `db-nube` (VM2). Permite la propagación automática de cambios en la tabla `fichas_pacientes` según su origen (`origen_registro = 'local'` o `'nube'`), asegurando consistencia y tolerancia a fallos.
-2.  **Acceso Unificado (Gateway)**: VM3 enruta las peticiones de los clientes mediante NGINX hacia las aplicaciones correspondientes a través de la red privada interna de GCP, encriptando el tráfico hacia el exterior mediante Cloudflare.
-3.  **Monorepo con Docker**: Cada nodo utiliza Docker y `docker-compose` para asegurar portabilidad y fácil despliegue en entornos virtuales Debian/Ubuntu en la nube.
+```
+                  [ Navegador del Usuario (Cliente) ]
+                                   │
+                        ( HTTPS / WSS Seguro )
+                                   ▼
+                     [ VM 3: Cloudflare Tunnel ]
+                                   │ (Túnel Inverso)
+                                   ▼
+                     [ VM 3: Nginx Proxy Inverso ]
+             ┌─────────────────────┴─────────────────────┐
+   (ws-medicas / ws-adm)                      (ws-administrativas)
+             ▼                                           ▼
+ ┌──────────────────────────┐                ┌──────────────────────────┐
+ │ VM 1: Hospital Local     │                │ VM 2: Nube Central       │
+ │ IP: 10.128.0.10          │                │ IP: 10.128.0.20          │
+ ├──────────────────────────┤                ├──────────────────────────┤
+ │ ├─ App Estaciones (Main) │                │ ├─ App Terminales (Main) │
+ │ ├─ App Estaciones (Repl) │                │ ├─ App Terminales (Repl) │
+ │ ├─ HAProxy PostgreSQL    │                │ ├─ HAProxy PostgreSQL    │
+ │ ├─ PostgreSQL Master     │                │ ├─ PostgreSQL Master     │
+ │ └─ PostgreSQL Replica    │                │ └─ PostgreSQL Replica    │
+ └────────────┬─────────────┘                └────────────┬─────────────┘
+              │ (HTTP POST)                               │ (HTTP POST)
+              └─────────────────────┬─────────────────────┘
+                                    ▼
+                       ┌──────────────────────────┐
+                       │ VM 3: Gateway / Central  │
+                       ├──────────────────────────┤
+                       │ ├─ Middleware API (MW)   │
+                       │ │   └─ PostgreSQL cont.  │
+                       │ ├─ App 3: Bodega / Stock │
+                       │ ├─ HAProxy PostgreSQL    │
+                       │ ├─ PostgreSQL Central M. │
+                       │ └─ PostgreSQL Central R. │
+                       └──────────────────────────┘
+```
 
 ---
 
-## 🚀 Resumen del Despliegue en GCP
+## 💻 Heterogeneidad de Componentes
 
-Para desplegar y configurar el entorno, el flujo general es:
-1.  **Levantar las 3 instancias en GCP**: `vm-hospital-local`, `vm-nube-central`, y `vm-gateway`.
-2.  **Clonar el repositorio** y hacer checkout de la rama correspondiente a cada VM (`VM1`, `VM2`, o `VM3`).
-3.  **Iniciar Docker Compose** en cada VM respectiva.
-4.  **Establecer las suscripciones cruzadas** en PostgreSQL para habilitar la replicación lógica bidireccional.
+Para simular la integración de sistemas heredados (legacy) y cumplir con la heterogeneidad tecnológica, cada nodo opera bajo diferentes infraestructuras:
 
-*(Para ver los comandos y el paso a paso exacto del despliegue, consulta el `README.md` de las ramas [VM1](https://github.com/maruzs/Proyecto-OSDS/tree/VM1) o [VM2](https://github.com/maruzs/Proyecto-OSDS/tree/VM2)).*
+### A. VM 1 — Hospital Local (Estaciones Médicas)
+*   **Base de Datos Local**: **PostgreSQL 16** configurado con esquema Maestro-Réplica físico mediante streaming replication (`pg_basebackup`).
+*   **Balanceador/Proxy de DB**: **HAProxy** escuchando en el puerto `5432` redirigiendo de forma transparente las consultas al nodo maestro saludable.
+*   **Backend clínico**: Servidor en **Node.js (JavaScript)** que interactúa con la base de datos a través de HAProxy y mantiene conexiones en tiempo real vía WebSockets (`socket.io`).
+*   **Frontend**: Interfaz gráfica del médico para gestionar fichas y diagnósticos en tiempo real.
+
+### B. VM 2 — Nube Central (Terminales Administrativas)
+*   **Base de Datos Centralizada**: **PostgreSQL 16** con replicación física Maestro-Réplica.
+*   **Backend administrativo**: Servidor asíncrono de alto rendimiento en **Python 3.10** (`python-socketio`, `aiohttp`, `asyncpg`) encargado de gestionar admisiones globales y auditoría.
+*   **Frontend**: Interfaz del administrador para registrar pacientes y realizar admisiones.
+
+### C. VM 3 — Gateway & Seguridad
+*   **Nginx Proxy Inverso**: Enruta el tráfico externo cifrado hacia las aplicaciones internas del hospital y la nube.
+*   **Cloudflare Tunnel**: Expone las interfaces seguras de manera externa (HTTPS) sin abrir puertos públicos a Internet en GCP.
+*   **Middleware de Sincronización**: Aplicación en **Node.js/Express** encargada de coordinar las escrituras globales, analizar recetas en diagnósticos clínicos para aplicar descuentos automáticos e interactuar con Bodega.
+*   **App 3 (Sistema de Bodega)**: Gestiona el inventario clínico, interactuando con la base de datos central.
+*   **Base de Contingencia**: Instancia **PostgreSQL** (`db-contingencia`) dedicada exclusivamente a encolar transacciones en caso de caídas de la base central.
+
+---
+
+## 🛡️ Mecanismos de Tolerancia a Fallos y Resiliencia
+
+El diseño garantiza operaciones continuas mediante redundancias en tres niveles críticos:
+
+1.  **Failover de Aplicaciones (Nginx Upstream)**:
+    Si la instancia principal de una aplicación clínica (`app-estaciones` o `app-terminales`) experimenta una interrupción, Nginx detecta el fallo tras un reintento y conmuta el tráfico hacia el contenedor réplica (`app-estaciones-replica` / `app-terminales-replica`) en menos de 5 segundos de forma transparente.
+2.  **Resiliencia de Base de Datos (HAProxy Local)**:
+    Las aplicaciones se conectan únicamente al puerto del proxy HAProxy (`5432`). Ante una desconexión o falla del servidor PostgreSQL Maestro, HAProxy redirige las conexiones a la Base de Datos Réplica.
+3.  **Buffer de Contingencia (Offline Sync Queue)**:
+    Si la base de datos central o el microservicio de Bodega se desconectan, el **Middleware** captura el fallo, almacena la transacción en la base PostgreSQL local (`db-contingencia`) con estado `PENDING`, y activa un daemon de sincronización en segundo plano (worker) que reintenta consolidar las transacciones cada 10 segundos una vez que se restablece la comunicación.
+
+---
+
+## 🗂️ Estructura del Monorepo
+
+El repositorio utiliza una estructura unificada y modular administrada con `pnpm`:
+
+```
+Proyecto-OSDS/
+├── apps/                           # Aplicaciones y servicios del sistema
+│   ├── estaciones-medicas/         # App 1: Backend de Estaciones Médicas (Node.js)
+│   ├── terminales-administrativas/ # App 2: Backend de Terminales Administrativas (Python)
+│   ├── app-bodega/                 # App 3: Sistema de Bodega (Node.js)
+│   ├── middleware/                 # Middleware y cola de contingencia (Node.js/Express)
+│   └── frontend/                   # Frontend Web Común (HTML/JS)
+├── docs/                           # Documentación técnica, diagramas y reportes
+│   ├── diagrams/                   # Diagramas de arquitectura UML
+│   ├── report/                     # Reporte académico (LaTeX)
+│   ├── documentacion.md            # Especificaciones técnicas detalladas
+│   ├── pruebasTolerancia.md        # Guía interactiva de simulación de fallos
+│   └── guiaInfraestructura.md      # Comandos y guías para operar VMs en GCP
+├── scripts/
+│   └── rebuild-gcp-vms.sh          # Script de reconstrucción total de VMs y redes en GCP
+├── vms/                            # Orquestación de infraestructura mediante Docker Compose
+│   ├── vm1-hospital/               # Docker Compose, HAProxy y base local (VM 1)
+│   ├── vm2-nube/                   # Docker Compose, HAProxy y base de la nube (VM 2)
+│   └── vm3-gateway/                # Docker Compose, Nginx, Middleware, Bodega y DB Central (VM 3)
+├── package.json                    # Scripts globales de desarrollo y automatización
+└── pnpm-workspace.yaml             # Definición de workspace del monorepo
+```
+
+---
+
+## 🚀 Guía Rápida de Despliegue en GCP
+
+### 1. Preparación de las Instancias en GCP
+Para iniciar las instancias existentes asociadas al proyecto de GCP:
+```bash
+gcloud config set project os-ds-498615
+gcloud compute instances start vm-hospital-local vm-nube-central vm-gateway --zone=us-central1-a
+```
+
+### 2. Despliegue de Servicios por VM
+Conéctate por SSH a cada máquina virtual y clona/levanta el servicio correspondiente:
+
+*   **VM 1 (Hospital Local):**
+    ```bash
+    git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
+    cd ~/Proyecto-OSDS/vms/vm1-hospital
+    sudo docker compose up --build -d
+    ```
+*   **VM 2 (Nube Central):**
+    ```bash
+    git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
+    cd ~/Proyecto-OSDS/vms/vm2-nube
+    sudo docker compose up --build -d
+    ```
+*   **VM 3 (Gateway / Middleware / Central):**
+    ```bash
+    git clone https://github.com/maruzs/Proyecto-OSDS.git ~/Proyecto-OSDS
+    # Crea el archivo .env con el TUNNEL_TOKEN provisto
+    echo "TUNNEL_TOKEN=tu_cloudflare_token_aqui" > ~/Proyecto-OSDS/vms/vm3-gateway/.env
+    cd ~/Proyecto-OSDS/vms/vm3-gateway
+    sudo docker compose up --build -d
+    ```
+
+---
+
+## 🧪 Pruebas de Tolerancia a Fallos
+
+Para realizar la verificación empírica de la tolerancia a fallos (caída de aplicaciones, caída del PostgreSQL maestro, y caída del sistema de bodega con recuperación asíncrona), por favor sigue la [Guía Detallada de Pruebas de Tolerancia a Fallos](file:///c:/Users/Administrator/Desktop/Proyecto-OSDS/docs/pruebasTolerancia.md).
