@@ -1,7 +1,4 @@
 # Guía de Defensa OSDS - VM3 (Gateway, Middleware y BD Central)
-
-Este documento ha sido diseñado para prepararte en la explicación, presentación y defensa técnica de la **VM3** ante la comisión evaluadora. Contiene los conceptos clave, justificaciones de diseño, diagramas de flujo interno y respuestas a preguntas difíciles de la comisión.
-
 ---
 
 ## 1. Resumen Ejecutivo de la VM3: ¿Qué rol cumple?
