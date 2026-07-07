@@ -50,6 +50,24 @@ graph TD
     *   Modifique el diagnóstico del paciente agregando la receta del medicamento controlado: **"Paracetamol 500mg"** (o *"Ibuprofeno 600mg"*).
     *   Al guardar los cambios, muestre cómo el stock de la bodega se descuenta de forma síncrona en el frontend de 498 a 497 unidades.
     *   Explique el flujo: El Middleware interceptó la palabra clave, extrajo el código `INS-001` y notificó al servicio de Bodega (`app-bodega`) para actualizar el stock.
+5.  **Verificación Rápida de Replicación Física (Maestro-Réplica en VM3):**
+    *   Para certificar en vivo ante la comisión la replicación física en streaming de base de datos:
+        *   **Verificar insumo en la Réplica (Existe):**
+            ```bash
+            gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec -t db-central-replica psql -U postgres -d clinica_central -c \"SELECT codigo, nombre FROM inventario_insumos WHERE codigo = 'INS-001';\"" --quiet
+            ```
+        *   **Eliminar insumo en el Maestro:**
+            ```bash
+            gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec -t db-central-master psql -U postgres -d clinica_central -c \"DELETE FROM inventario_insumos WHERE codigo = 'INS-001';\"" --quiet
+            ```
+        *   **Confirmar eliminación instantánea en la Réplica (No existe):**
+            ```bash
+            gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec -t db-central-replica psql -U postgres -d clinica_central -c \"SELECT codigo, nombre FROM inventario_insumos WHERE codigo = 'INS-001';\"" --quiet
+            ```
+        *   **Restaurar el insumo original en el Maestro:**
+            ```bash
+            gcloud compute ssh vm-gateway --zone=us-central1-a --command="sudo docker exec -t db-central-master psql -U postgres -d clinica_central -c \"INSERT INTO inventario_insumos (codigo, nombre, stock, descripcion) VALUES ('INS-001', 'Paracetamol 500mg', 500, 'Analgesico y antipiretico comun');\"" --quiet
+            ```
 
 ---
 
