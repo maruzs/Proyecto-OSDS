@@ -28,7 +28,7 @@ async def init_db():
     print("[SISTEMA] Conexión establecida con db-nube-proxy.")
 
 @sio.event
-async def connect(sid, environ):
+async def connect(sid, environ, auth):
     print(f"[CONEXIÓN] Cliente conectado (nube). ID Socket: {sid}")
 
 @sio.event
@@ -100,6 +100,44 @@ async def admitir_paciente(sid, data):
     except Exception as err:
         print(f"[DB_ERROR] Error al insertar en db-nube: {err}")
         await sio.emit("error_admision", {"error": str(err)}, to=sid)
+
+@sio.event
+async def consultar_paciente(sid, data):
+    print(f"[CONSULTA] Solicitud recibida: {data}")
+
+    if not data or not data.get("rut"):
+        await sio.emit("ficha_paciente", {"estado": "ERROR", "mensaje": "RUT requerido"}, to=sid)
+        return
+
+    rut = data["rut"]
+
+    try:
+        async with db_pool.acquire() as conn:
+            query = """
+                SELECT id, rut, nombre, diagnostico, origen_registro, fecha_actualizacion
+                FROM fichas_pacientes
+                WHERE rut = $1
+                ORDER BY fecha_actualizacion DESC
+                LIMIT 1;
+            """
+            row = await conn.fetchrow(query, rut)
+
+            if row is None:
+                print(f"[CONSULTA] RUT {rut} no encontrado en db-nube")
+                await sio.emit("ficha_paciente", {"estado": "NO_ENCONTRADO"}, to=sid)
+                return
+
+            res_data = dict(row)
+            res_data["id"] = str(res_data["id"])
+            if isinstance(res_data.get("fecha_actualizacion"), (datetime.date, datetime.datetime)):
+                res_data["fecha_actualizacion"] = res_data["fecha_actualizacion"].isoformat()
+
+            print(f"[OK] Ficha encontrada para RUT {rut}: {res_data['id']}")
+            await sio.emit("ficha_paciente", {"estado": "OK", "datos": res_data}, to=sid)
+
+    except Exception as err:
+        print(f"[DB_ERROR] Error al consultar RUT {rut}: {err}")
+        await sio.emit("ficha_paciente", {"estado": "ERROR", "mensaje": str(err)}, to=sid)
 
 async def start_background_tasks(app_obj):
     await init_db()

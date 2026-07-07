@@ -517,6 +517,10 @@
                         <span class="status-dot status-disconnected" id="dot-administrativas"></span>
                         <span>Terminales Adm. (Nube)</span>
                     </div>
+                    <div class="status-badge" id="status-queue" style="display: none;">
+                        <span class="status-dot status-connected" id="dot-queue" style="background-color: var(--color-success);"></span>
+                        <span>Cola Contingencia: <strong id="queue-count">0</strong></span>
+                    </div>
                 </div>
             </div>
         </header>
@@ -602,6 +606,37 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Panel Inventario de Bodega (Visible para todos los roles) -->
+            <section class="card bodega-card" id="panel-bodega" style="border-top-color: #8b5cf6;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2>📦 Inventario de Bodega e Insumos Clínicos</h2>
+                        <p>Stock actual en la base de datos central. Se actualiza automáticamente ante prescripciones médicas.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="cargarInventario()" style="background: #8b5cf6;">
+                        🔄 Refrescar Stock
+                    </button>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-color); background: #f8fafc;">
+                                <th style="padding: 0.75rem;">Código</th>
+                                <th style="padding: 0.75rem;">Descripción de Insumo</th>
+                                <th style="padding: 0.75rem; text-align: right;">Cantidad Disponible</th>
+                                <th style="padding: 0.75rem; text-align: center;">Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventario-body">
+                            <tr>
+                                <td colspan="4" style="padding: 1rem; text-align: center; color: var(--text-secondary);">Cargando inventario...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
         </main>
 
         <div class="toast-container" id="toast-container"></div>
@@ -616,6 +651,7 @@
         let socketAdministrativas = null;
         let usuarioActual = null;
         let rolActual = null;
+        let inventarioInterval = null;
 
         function ingresarSistema() {
             const nombre = document.getElementById('login-name').value.trim();
@@ -642,6 +678,17 @@
             
             // Configurar Vistas por Rol e inicializar Sockets
             inicializarVistasYSockets(rolActual);
+
+            // Mostrar el status de la cola
+            document.getElementById('status-queue').style.display = 'flex';
+
+            // Cargar e iniciar actualización periódica del inventario de bodega y cola status
+            cargarInventario();
+            cargarColaStatus();
+            inventarioInterval = setInterval(() => {
+                cargarInventario();
+                cargarColaStatus();
+            }, 5000);
         }
 
         function cerrarSesion() {
@@ -655,9 +702,16 @@
                 socketAdministrativas = null;
             }
             
+            // Detener actualización de inventario
+            if (inventarioInterval) {
+                clearInterval(inventarioInterval);
+                inventarioInterval = null;
+            }
+            
             // Ocultar badges de conexión
             document.getElementById('status-medicas').style.display = 'none';
             document.getElementById('status-administrativas').style.display = 'none';
+            document.getElementById('status-queue').style.display = 'none';
             
             // Limpiar datos
             usuarioActual = null;
@@ -674,6 +728,62 @@
             // Volver al login
             document.getElementById('app-container').style.display = 'none';
             document.getElementById('login-container').style.display = 'flex';
+        }
+
+        async function cargarColaStatus() {
+            try {
+                const response = await fetch('/api/mw/status');
+                const data = await response.json();
+                if (data.status === 'OK') {
+                    const countEl = document.getElementById('queue-count');
+                    const dotEl = document.getElementById('dot-queue');
+                    countEl.textContent = data.queueSize;
+                    if (data.queueSize > 0) {
+                        dotEl.className = 'status-dot';
+                        dotEl.style.backgroundColor = 'var(--color-warning)';
+                        dotEl.style.animation = 'pulse-danger 1.5s infinite';
+                        dotEl.style.boxShadow = '0 0 6px var(--color-warning)';
+                    } else {
+                        dotEl.className = 'status-dot';
+                        dotEl.style.backgroundColor = 'var(--color-success)';
+                        dotEl.style.animation = 'none';
+                        dotEl.style.boxShadow = '0 0 6px var(--color-success)';
+                    }
+                }
+            } catch (err) {
+                console.error('Error al cargar status de cola:', err);
+                const dotEl = document.getElementById('dot-queue');
+                dotEl.className = 'status-dot';
+                dotEl.style.backgroundColor = 'var(--color-danger)';
+                dotEl.style.boxShadow = '0 0 6px var(--color-danger)';
+            }
+        }
+
+        async function cargarInventario() {
+            try {
+                const response = await fetch('/api/inventario');
+                const data = await response.json();
+                if (data.status === 'OK' && data.datos) {
+                    const tbody = document.getElementById('inventario-body');
+                    tbody.innerHTML = '';
+                    data.datos.forEach(item => {
+                        const tr = document.createElement('tr');
+                        tr.style.borderBottom = '1px solid #e2e8f0';
+                        const stockStyle = item.stock < 200 ? 'color: var(--color-warning); font-weight: 700;' : 'color: var(--text-primary); font-weight: 600;';
+                        tr.innerHTML = `
+                            <td style="padding: 0.75rem; font-family: monospace; font-weight: 600;">${item.codigo}</td>
+                            <td style="padding: 0.75rem; font-weight: 500;">${item.nombre}</td>
+                            <td style="padding: 0.75rem; text-align: right; ${stockStyle}">${item.stock}</td>
+                            <td style="padding: 0.75rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">${item.unidad || 'unidades'}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (err) {
+                console.error('Error al cargar inventario:', err);
+                const tbody = document.getElementById('inventario-body');
+                tbody.innerHTML = `<tr><td colspan="4" style="padding: 1rem; text-align: center; color: var(--color-danger); font-weight: 600;">⚠️ Error al conectar con el servicio de Bodega</td></tr>`;
+            }
         }
 
         function inicializarVistasYSockets(rol) {

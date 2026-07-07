@@ -1,10 +1,11 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
+app.use(express.json());
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -12,15 +13,15 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-const pool = mysql.createPool({
+const pool = new Pool({
     host: process.env.DB_HOST || 'db-local-proxy',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'clinica_user',
-    password: process.env.DB_PASSWORD || 'clinica_secure_pass',
+    port: parseInt(process.env.DB_PORT || '5432'),
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres_secure_pass',
     database: process.env.DB_NAME || 'clinica',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
 });
 
 const PORT = 8001;
@@ -36,10 +37,11 @@ io.on('connection', (socket) => {
         }
 
         try {
-            const [rows] = await pool.query(
-                'SELECT * FROM fichas_pacientes WHERE rut = ?',
+            const resDb = await pool.query(
+                'SELECT * FROM fichas_pacientes WHERE rut = $1',
                 [data.rut]
             );
+            const rows = resDb.rows;
 
             if (rows.length > 0) {
                 console.log(`[OK] Paciente encontrado. RUT: ${data.rut}, ID: ${rows[0].id}`);
@@ -62,19 +64,17 @@ io.on('connection', (socket) => {
         }
 
         try {
-            // MariaDB no soporta RETURNING *, por lo que realizamos el UPDATE y luego un SELECT
-            const [result] = await pool.query(
+            // En PostgreSQL, podemos usar RETURNING * para evitar hacer una segunda consulta
+            const resDb = await pool.query(
                 `UPDATE fichas_pacientes 
-                 SET diagnostico = ?, fecha_actualizacion = CURRENT_TIMESTAMP
-                 WHERE id = ?`,
+                 SET diagnostico = $1, fecha_actualizacion = CURRENT_TIMESTAMP
+                 WHERE id = $2
+                 RETURNING *`,
                 [data.diagnostico, data.id]
             );
+            const rows = resDb.rows;
 
-            if (result.affectedRows > 0) {
-                const [rows] = await pool.query(
-                    'SELECT * FROM fichas_pacientes WHERE id = ?',
-                    [data.id]
-                );
+            if (rows.length > 0) {
                 console.log(`[OK] Diagnostico actualizado. ID: ${data.id}`);
                 socket.emit('diagnostico_actualizado', { estado: 'OK', datos: rows[0] });
 
@@ -107,6 +107,30 @@ io.on('connection', (socket) => {
     });
 });
 
+// Endpoint HTTP para recibir sincronización de admisiones desde el Middleware (VM3)
+app.post('/api/pacientes/sincronizar', async (req, res) => {
+    const { id, rut, nombre, diagnostico, origen_registro } = req.body;
+    console.log(`[SYNC] Solicitud de sincronización recibida del Middleware. RUT: ${rut}`);
+
+    if (!id || !rut || !nombre) {
+        return res.status(400).json({ error: 'Campos id, rut y nombre son requeridos.' });
+    }
+
+    try {
+        await pool.query(
+            `INSERT INTO fichas_pacientes (id, rut, nombre, diagnostico, origen_registro)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre, diagnostico = EXCLUDED.diagnostico`,
+            [id, rut, nombre, diagnostico || 'Ingreso Administrativo / En espera de atencion', origen_registro || 'nube']
+        );
+        console.log(`[SYNC] Paciente ${rut} sincronizado correctamente en PostgreSQL local.`);
+        res.json({ status: 'OK', message: 'Paciente sincronizado en base de datos local.' });
+    } catch (err) {
+        console.error(`[SYNC_ERROR] Error al sincronizar paciente ${rut}:`, err.message);
+        res.status(500).json({ status: 'ERROR', message: err.message });
+    }
+});
+
 server.listen(PORT, () => {
-    console.log(`[SISTEMA] Servidor Estaciones Medicas (MariaDB) operativo en puerto ${PORT}`);
+    console.log(`[SISTEMA] Servidor Estaciones Medicas (PostgreSQL) operativo en puerto ${PORT}`);
 });

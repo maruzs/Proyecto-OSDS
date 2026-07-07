@@ -26,9 +26,9 @@ El sistema se compone de **3 Máquinas Virtuales (VMs)** desplegadas en la zona 
 ├──────────────────────────┤                ├──────────────────────────┤
 │ ├─ App Estaciones (Main) │                │ ├─ App Terminales (Main) │
 │ ├─ App Estaciones (Repl) │                │ ├─ App Terminales (Repl) │
-│ ├─ HAProxy MariaDB       │                │ ├─ HAProxy PostgreSQL    │
-│ ├─ MariaDB Master        │                │ ├─ PostgreSQL Master     │
-│ └─ MariaDB Replica       │                │ └─ PostgreSQL Replica    │
+│ ├─ HAProxy PostgreSQL    │                │ ├─ HAProxy PostgreSQL    │
+│ ├─ PostgreSQL Master     │                │ ├─ PostgreSQL Master     │
+│ └─ PostgreSQL Replica    │                │ └─ PostgreSQL Replica    │
 └────────────┬─────────────┘                └────────────┬─────────────┘
              │ (HTTP POST)                               │ (HTTP POST)
              └─────────────────────┬─────────────────────┘
@@ -37,11 +37,11 @@ El sistema se compone de **3 Máquinas Virtuales (VMs)** desplegadas en la zona 
                       │ VM 3: Gateway / Central  │
                       ├──────────────────────────┤
                       │ ├─ Middleware API (MW)   │
-                      │ │   └─ SQLite conting.   │
+                      │ │   └─ PostgreSQL cont.  │
                       │ ├─ App 3: Bodega / Stock │
-                      │ ├─ HAProxy MySQL         │
-                      │ ├─ MySQL Central Master  │
-                      │ └─ MySQL Central Replica │
+                      │ ├─ HAProxy PostgreSQL    │
+                      │ ├─ PostgreSQL Central M. │
+                      │ └─ PostgreSQL Central R. │
                       └──────────────────────────┘
 ```
 
@@ -52,9 +52,9 @@ El sistema se compone de **3 Máquinas Virtuales (VMs)** desplegadas en la zona 
 Para cumplir con las directivas de heterogeneidad e integración de sistemas heredados, cada nodo ejecuta una tecnología y lenguaje diferente:
 
 ### A. VM 1: Hospital Local (Estaciones Médicas)
-*   **Base de Datos:** **MariaDB 10.11** configurada en esquema Maestro-Réplica. La replicación se realiza a nivel lógico mediante Logs Binarios (`mysql-bin`).
-*   **Proxy Local:** **HAProxy** escuchando en el puerto `3306` que redirige consultas de lectura/escritura al Maestro y conmuta a la Réplica en caso de caída.
-*   **Lenguaje/Backend:** **Node.js (JavaScript)** que utiliza el framework de WebSockets `socket.io` y el driver asíncrono `mysql2/promise` para interactuar con la base de datos a través del HAProxy.
+*   **Base de Datos:** **PostgreSQL 16** configurada en esquema Maestro-Réplica. La replicación se realiza a nivel físico mediante streaming con `pg_basebackup`.
+*   **Proxy Local:** **HAProxy** escuchando en el puerto `5432` que redirige consultas de lectura/escritura al Maestro y conmuta a la Réplica en caso de caída.
+*   **Lenguaje/Backend:** **Node.js (JavaScript)** que utiliza el framework de WebSockets `socket.io` y el driver asíncrono `pg` para interactuar con la base de datos a través del HAProxy.
 
 ### B. VM 2: Nube Central (Terminales Administrativas)
 *   **Base de Datos:** **PostgreSQL 16** en esquema Maestro-Réplica. Sincronización mediante replicación física en streaming con `pg_basebackup`.
@@ -62,9 +62,9 @@ Para cumplir con las directivas de heterogeneidad e integración de sistemas her
 *   **Lenguaje/Backend:** **Python 3.10** utilizando las librerías `python-socketio`, `aiohttp` para el servidor asíncrono y `asyncpg` para la interacción asíncrona de alto rendimiento con PostgreSQL.
 
 ### C. VM 3: Nodo Central (Middleware, Bodega y Gateway)
-*   **Base de Datos Central:** **MySQL 8.0** en esquema Maestro-Réplica, administrado localmente.
-*   **Middleware:** Servidor **Node.js/Express** encargado del enrutamiento de transacciones, normalización y colas de contingencia offline.
-*   **Aplicación 3 (Sistema de Bodega):** Servidor **Node.js** que gestiona el stock de medicamentos clínicos e insumos.
+*   **Base de Datos Central:** **PostgreSQL 16** en esquema Maestro-Réplica, administrado localmente.
+*   **Middleware:** Servidor **Node.js/Express** encargado del enrutamiento de transacciones, normalización y colas de contingencia offline respaldadas por una base PostgreSQL local (`db-contingencia`).
+*   **Aplicación 3 (Sistema de Bodega):** Servidor **Node.js** que gestiona el stock de medicamentos clínicos e insumos conectado a la base central PostgreSQL.
 
 ---
 
@@ -81,19 +81,19 @@ Cada máquina virtual ejecuta un balanceador TCP local (HAProxy):
 *   Las aplicaciones nunca se conectan directamente a una instancia específica de base de datos, sino al puerto local expuesto por HAProxy.
 *   HAProxy realiza health checks TCP regulares cada 3 segundos. Si el Maestro falla, HAProxy redirige las consultas a la base de datos de respaldo (Réplica) de forma transparente.
 
-### C. Capa de Integración / Comunicación (Cola de Contingencia SQLite)
-El **Middleware** implementa un búfer de contingencia local basado en **SQLite** (`contingencia.db`):
-*   Cuando la App 1 o la App 2 notifican transacciones (admisiones o diagnósticos/recetas), el Middleware intenta escribirlas inmediatamente en la Base de Datos Central MySQL y notificar a Bodega.
-*   Si la base MySQL o la App de Bodega están caídas, el Middleware atrapa el error de conexión, guarda la petición con su correspondiente payload JSON en la tabla local SQLite `cola_contingencia`, y devuelve un código de estado `PENDING`.
+### C. Capa de Integración / Comunicación (Cola de Contingencia PostgreSQL)
+El **Middleware** implementa un búfer de contingencia local basado en **PostgreSQL** (`db-contingencia`):
+*   Cuando la App 1 o la App 2 notifican transacciones (admisiones o diagnósticos/recetas), el Middleware intenta escribirlas inmediatamente en la Base de Datos Central PostgreSQL y notificar a Bodega.
+*   Si la base PostgreSQL o la App de Bodega están caídas, el Middleware atrapa el error de conexión, guarda la petición con su correspondiente payload JSON en la tabla local PostgreSQL `cola_contingencia`, y devuelve un código de estado `PENDING`.
 *   Un **worker en segundo plano** corre cada 10 segundos intentando vaciar la cola. Al detectar que el servicio vuelve a estar en línea, procesa las solicitudes pendientes de forma cronológica y limpia el búfer.
 
 ---
 
 ## 🔄 4. Flujo de Negocio Completo
 
-1.  **Admisión (App 2):** El personal administrativo ingresa un paciente desde la web. La petición llega al WebSocket de la App 2, se persiste en PostgreSQL de la VM2 y, acto seguido, se envía una notificación HTTP POST asíncrona al Middleware en la VM3. El Middleware registra la admisión de forma centralizada en MySQL.
-2.  **Atención Médica (App 1):** El médico realiza la consulta, busca al paciente por su RUT (los datos se leen desde la base MariaDB local de la VM1) y actualiza el diagnóstico clínico. Al presionar guardar, los datos se actualizan en MariaDB y se envía una notificación HTTP POST al Middleware.
-3.  **Procesamiento de Recetas y Descuento de Bodega:** El Middleware analiza el texto del diagnóstico. Si detecta palabras clave (ej: `"Paracetamol 500mg"` o `"Ibuprofeno 600mg"`), extrae el código del insumo correspondiente y hace una solicitud interna de descuento a la App 3 de Bodega. Esta reduce el inventario físico en la base de datos central de MySQL.
+1.  **Admisión (App 2):** El personal administrativo ingresa un paciente desde la web. La petición llega al WebSocket de la App 2, se persiste en PostgreSQL de la VM2 y, acto seguido, se envía una notificación HTTP POST asíncrona al Middleware en la VM3. El Middleware registra la admisión de forma centralizada en PostgreSQL.
+2.  **Atención Médica (App 1):** El médico realiza la consulta, busca al paciente por su RUT (los datos se leen desde la base PostgreSQL local de la VM1) y actualiza el diagnóstico clínico. Al presionar guardar, los datos se actualizan en PostgreSQL y se envía una notificación HTTP POST al Middleware.
+3.  **Procesamiento de Recetas y Descuento de Bodega:** El Middleware analiza el texto del diagnóstico. Si detecta palabras clave (ej: `"Paracetamol 500mg"` o `"Ibuprofeno 600mg"`), extrae el código del insumo correspondiente y hace una solicitud interna de descuento a la App 3 de Bodega. Esta reduce el inventario físico en la base de datos central de PostgreSQL.
 
 ---
 
@@ -118,8 +118,8 @@ Proyecto-OSDS/
 ├── vms/                    # Configuración de red y contenedores para cada VM
 │   ├── vm1-hospital/       # Orquestación y proxies locales de la VM 1
 │   │   ├── config/
-│   │   │   ├── db/                 # Scripts SQL de MariaDB
-│   │   │   └── proxy/              # Configuración de HAProxy MariaDB
+│   │   │   ├── db/                 # Scripts SQL de PostgreSQL Local
+│   │   │   └── proxy/              # Configuración de HAProxy PostgreSQL Local
 │   │   └── docker-compose.yml
 │   │
 │   ├── vm2-nube/           # Orquestación y proxies locales de la VM 2
@@ -130,9 +130,9 @@ Proyecto-OSDS/
 │   │
 │   └── vm3-gateway/        # Orquestación, proxies y Nginx del Gateway
 │       ├── config/
-│       │   ├── db/                 # Scripts SQL de MySQL Central
+│       │   ├── db/                 # Scripts SQL de PostgreSQL Central
 │       │   ├── nginx/              # Configuración de Nginx Reverse Proxy
-│       │   └── proxy/              # Configuración de HAProxy MySQL
+│       │   └── proxy/              # Configuración de HAProxy PostgreSQL Central
 │       └── docker-compose.yml
 ├── README.md               # Guía rápida de inicio
 ├── package.json            # Scripts de orquestación global

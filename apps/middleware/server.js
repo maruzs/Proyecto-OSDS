@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const mysql = require('mysql2/promise');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool, Client } = require('pg');
 const axios = require('axios');
 const path = require('path');
 
@@ -11,87 +10,111 @@ app.use(express.json());
 
 const PORT = 8000;
 
-// Configuración de MySQL Central (a través del proxy)
-const mysqlConfig = {
+const HOSPITAL_APP_URL = process.env.HOSPITAL_APP_URL || 'http://10.128.0.10:8001';
+
+// Configuración de PostgreSQL Central (a través del proxy)
+const pgCentralConfig = {
     host: process.env.DB_CENTRAL_HOST || 'db-central-proxy',
-    port: parseInt(process.env.DB_CENTRAL_PORT || '3306'),
-    user: process.env.DB_CENTRAL_USER || 'clinica_user',
-    password: process.env.DB_CENTRAL_PASSWORD || 'clinica_secure_pass',
+    port: parseInt(process.env.DB_CENTRAL_PORT || '5432'),
+    user: process.env.DB_CENTRAL_USER || 'postgres',
+    password: process.env.DB_CENTRAL_PASSWORD || 'postgres_secure_pass',
     database: process.env.DB_CENTRAL_NAME || 'clinica_central',
-    connectTimeout: 5000
+    connectionTimeoutMillis: 5000
+};
+
+// Configuración de PostgreSQL de contingencia
+const pgContingenciaConfig = {
+    host: process.env.DB_CONTINGENCIA_HOST || 'db-contingencia',
+    port: parseInt(process.env.DB_CONTINGENCIA_PORT || '5432'),
+    user: process.env.DB_CONTINGENCIA_USER || 'postgres',
+    password: process.env.DB_CONTINGENCIA_PASSWORD || 'postgres_secure_pass',
+    database: process.env.DB_CONTINGENCIA_NAME || 'contingencia',
+    connectionTimeoutMillis: 5000
 };
 
 // URL de la App de Bodega
 const BODEGA_APP_URL = process.env.BODEGA_APP_URL || 'http://app-bodega:8003';
 
 // ------------------------------------------------------------------------------
-# Base de datos SQLite de contingencia (Local en VM3)
+// Base de datos PostgreSQL de contingencia (Local en VM3)
 // ------------------------------------------------------------------------------
-const dbPath = path.join(__dirname, 'contingencia.db');
-const contingenciaDb = new sqlite3.Database(dbPath, (err) => {
-    if (err) console.error('[SQLITE] Error abriendo base de contingencia:', err);
-    else console.log('[SQLITE] Conectado a contingencia.db local.');
-});
+const contingenciaPool = new Pool(pgContingenciaConfig);
 
-contingenciaDb.serialize(() => {
-    contingenciaDb.run(`
-        CREATE TABLE IF NOT EXISTS cola_contingencia (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo VARCHAR(50) NOT NULL,
-            payload TEXT NOT NULL,
-            intentos INTEGER DEFAULT 0,
-            fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-});
+async function initContingenciaDb() {
+    try {
+        await contingenciaPool.query(`
+            CREATE TABLE IF NOT EXISTS cola_contingencia (
+                id SERIAL PRIMARY KEY,
+                tipo VARCHAR(50) NOT NULL,
+                payload TEXT NOT NULL,
+                intentos INTEGER DEFAULT 0,
+                fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[POSTGRES] Tabla de contingencia inicializada.');
+    } catch (err) {
+        console.error('[POSTGRES] Error inicializando tabla de contingencia:', err);
+    }
+}
+initContingenciaDb();
 
 // Helper para insertar en contingencia
-function encolarContingencia(tipo, payload) {
-    return new Promise((resolve, reject) => {
-        const sql = 'INSERT INTO cola_contingencia (tipo, payload) VALUES (?, ?)';
-        contingenciaDb.run(sql, [tipo, JSON.stringify(payload)], function(err) {
-            if (err) {
-                console.error('[SQLITE] Error al encolar:', err);
-                reject(err);
-            } else {
-                console.log(`[SQLITE] Sincronización diferida encolada. ID: ${this.lastID}`);
-                resolve(this.lastID);
-            }
-        });
-    });
+async function encolarContingencia(tipo, payload) {
+    const sql = 'INSERT INTO cola_contingencia (tipo, payload) VALUES ($1, $2) RETURNING id';
+    try {
+        const res = await contingenciaPool.query(sql, [tipo, JSON.stringify(payload)]);
+        const insertId = res.rows[0].id;
+        console.log(`[POSTGRES] Sincronización diferida encolada. ID: ${insertId}`);
+        return insertId;
+    } catch (err) {
+        console.error('[POSTGRES] Error al encolar:', err);
+        throw err;
+    }
 }
 
 // ------------------------------------------------------------------------------
-# Endpoints del Middleware
+// Endpoints del Middleware
 // ------------------------------------------------------------------------------
 
 // 1. Registro de Pacientes (Consolidación desde App 2)
 app.post('/api/mw/pacientes', async (req, res) => {
-    const { id, rut, nombre, origen_registro } = req.body;
+    const { id, rut, nombre, diagnostico, origen_registro } = req.body;
     console.log(`[MIDDLEWARE] Procesando admisión del paciente: ${nombre} (${rut})`);
 
     if (!id || !rut || !nombre) {
         return res.status(400).json({ error: 'Campos id, rut y nombre son requeridos.' });
     }
 
-    const payload = { id, rut, nombre, origen: origen_registro || 'desconocido' };
+    const payload = { id, rut, nombre, diagnostico, origen: origen_registro || 'desconocido' };
 
-    let connection;
+    let client;
     try {
-        connection = await mysql.createConnection(mysqlConfig);
-        await connection.execute(
-            'INSERT INTO registro_admisiones (id, rut, nombre, origen) VALUES (?, ?, ?, ?)',
+        client = new Client(pgCentralConfig);
+        await client.connect();
+        await client.query(
+            'INSERT INTO registro_admisiones (id, rut, nombre, origen) VALUES ($1, $2, $3, $4)',
             [payload.id, payload.rut, payload.nombre, payload.origen]
         );
         console.log(`[MIDDLEWARE] Sincronización inmediata en DB Central (Paciente ID: ${id})`);
-        res.json({ status: 'OK', message: 'Paciente guardado en base de datos central.' });
     } catch (err) {
         console.error('[MIDDLEWARE_ERROR] Base de datos central no responde. Guardando en contingencia:', err.message);
         await encolarContingencia('ADMITIR_PACIENTE', payload);
-        res.json({ status: 'PENDING', message: 'Base central fuera de línea. Admisión registrada en cola de contingencia.' });
     } finally {
-        if (connection) await connection.end();
+        if (client) await client.end();
     }
+
+    // Reenviar la admisión al Hospital Local (VM1) para que quede disponible en Estaciones Médicas
+    try {
+        await axios.post(`${HOSPITAL_APP_URL}/api/pacientes/sincronizar`, {
+            id, rut, nombre, diagnostico, origen_registro: origen_registro || 'nube'
+        });
+        console.log(`[MIDDLEWARE] Paciente ${rut} sincronizado con éxito en Hospital Local (VM1).`);
+    } catch (errHospital) {
+        console.error(`[MIDDLEWARE_ERROR] Error al sincronizar con Hospital Local: ${errHospital.message}. Encolando.`);
+        await encolarContingencia('SINCRONIZAR_HOSPITAL', payload);
+    }
+
+    res.json({ status: 'OK', message: 'Paciente procesado.' });
 });
 
 // 2. Registro de Diagnósticos y Consumo de Bodega (Desde App 1)
@@ -120,13 +143,14 @@ app.post('/api/mw/diagnosticos', async (req, res) => {
         codigoInsumo = 'INS-003';
     }
 
-    let connection;
+    let client;
     try {
-        connection = await mysql.createConnection(mysqlConfig);
+        client = new Client(pgCentralConfig);
+        await client.connect();
         
         // Guardar diagnóstico en base central de auditoría
-        await connection.execute(
-            'INSERT INTO auditoria_diagnosticos (id, rut, diagnostico, origen) VALUES (?, ?, ?, ?)',
+        await client.query(
+            'INSERT INTO auditoria_diagnosticos (id, rut, diagnostico, origen) VALUES ($1, $2, $3, $4)',
             [payload.id, payload.rut, payload.diagnostico, payload.origen]
         );
         console.log(`[MIDDLEWARE] Sincronización inmediata en DB Central (Diagnóstico ID: ${id})`);
@@ -158,22 +182,36 @@ app.post('/api/mw/diagnosticos', async (req, res) => {
 
         res.json({ status: 'PENDING', message: 'Base central fuera de línea. Registro encolado.' });
     } finally {
-        if (connection) await connection.end();
+        if (client) await client.end();
+    }
+});
+
+// 3. Endpoint de estado y cola para el frontend
+app.get('/api/mw/status', async (req, res) => {
+    try {
+        const resDb = await contingenciaPool.query('SELECT COUNT(*) as count FROM cola_contingencia');
+        res.json({ status: 'OK', queueSize: parseInt(resDb.rows[0].count) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
 // ------------------------------------------------------------------------------
-# Hilo Sincronizador de Contingencia (Corre cada 10 segundos)
+// Hilo Sincronizador de Contingencia (Corre cada 10 segundos)
 // ------------------------------------------------------------------------------
 async function procesarColaContingencia() {
-    contingenciaDb.all('SELECT * FROM cola_contingencia ORDER BY id ASC LIMIT 5', async (err, rows) => {
-        if (err || !rows || rows.length === 0) return;
+    try {
+        const resDb = await contingenciaPool.query('SELECT * FROM cola_contingencia WHERE intentos < 10 ORDER BY id ASC LIMIT 5');
+        const rows = resDb.rows;
+
+        if (!rows || rows.length === 0) return;
 
         console.log(`[SINCRONIZADOR] Procesando ${rows.length} elementos pendientes en cola de contingencia...`);
 
-        let connection;
+        let client;
         try {
-            connection = await mysql.createConnection(mysqlConfig);
+            client = new Client(pgCentralConfig);
+            await client.connect();
             
             for (const row of rows) {
                 const payload = JSON.parse(row.payload);
@@ -181,13 +219,13 @@ async function procesarColaContingencia() {
                 
                 try {
                     if (row.tipo === 'ADMITIR_PACIENTE') {
-                        await connection.execute(
-                            'INSERT INTO registro_admisiones (id, rut, nombre, origen) VALUES (?, ?, ?, ?)',
+                        await client.query(
+                            'INSERT INTO registro_admisiones (id, rut, nombre, origen) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
                             [payload.id, payload.rut, payload.nombre, payload.origen]
                         );
                     } else if (row.tipo === 'GUARDAR_DIAGNOSTICO') {
-                        await connection.execute(
-                            'INSERT INTO auditoria_diagnosticos (id, rut, diagnostico, origen) VALUES (?, ?, ?, ?)',
+                        await client.query(
+                            'INSERT INTO auditoria_diagnosticos (id, rut, diagnostico, origen) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
                             [payload.id, payload.rut, payload.diagnostico, payload.origen]
                         );
                     } else if (row.tipo === 'DESCONTAR_BODEGA') {
@@ -196,22 +234,32 @@ async function procesarColaContingencia() {
                             codigo: payload.codigo,
                             cantidad: payload.cantidad
                         });
+                    } else if (row.tipo === 'SINCRONIZAR_HOSPITAL') {
+                        await axios.post(`${HOSPITAL_APP_URL}/api/pacientes/sincronizar`, {
+                            id: payload.id,
+                            rut: payload.rut,
+                            nombre: payload.nombre,
+                            diagnostico: payload.diagnostico,
+                            origen_registro: payload.origen
+                        });
                     }
 
                     // Eliminar si fue procesado con éxito
-                    contingenciaDb.run('DELETE FROM cola_contingencia WHERE id = ?', [row.id]);
+                    await contingenciaPool.query('DELETE FROM cola_contingencia WHERE id = $1', [row.id]);
                     console.log(`[SINCRONIZADOR] Elemento ID ${row.id} sincronizado y eliminado de la cola.`);
                 } catch (errEl) {
                     console.error(`[SINCRONIZADOR_ERROR] Error procesando elemento ID ${row.id}: ${errEl.message}`);
-                    contingenciaDb.run('UPDATE cola_contingencia SET intentos = intentos + 1 WHERE id = ?', [row.id]);
+                    await contingenciaPool.query('UPDATE cola_contingencia SET intentos = intentos + 1 WHERE id = $1', [row.id]);
                 }
             }
         } catch (errConn) {
             console.error('[SINCRONIZADOR] Imposible reconectar a la base central de datos:', errConn.message);
         } finally {
-            if (connection) await connection.end();
+            if (client) await client.end();
         }
-    });
+    } catch (err) {
+        console.error('[SINCRONIZADOR] Error consultando la cola de contingencia:', err.message);
+    }
 }
 
 // Iniciar worker de fondo
